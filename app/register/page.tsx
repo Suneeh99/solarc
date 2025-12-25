@@ -1,27 +1,36 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useTransition } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Sun, Eye, EyeOff, Upload, Building, User } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Sun, Eye, EyeOff, Building, User } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
+import { registerAction } from "@/app/actions/auth"
+import type { User as SessionUser } from "@/lib/auth"
+
 function RegisterForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const defaultRole = searchParams.get("role") || "customer"
 
-  const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState(defaultRole)
-  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
+  const [loading, startTransition] = useTransition()
 
   const [customerData, setCustomerData] = useState({
     name: "",
@@ -47,51 +56,64 @@ function RegisterForm() {
     setActiveTab(defaultRole)
   }, [defaultRole])
 
-  const handleCustomerSubmit = async (e: React.FormEvent) => {
+  const handleCustomerSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
     if (customerData.password !== customerData.confirmPassword) {
-      setError("Passwords do not match")
+      setError("Passwords do not match.")
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "customer",
-          email: customerData.email,
-          name: customerData.name,
-        }),
-      )
+    startTransition(async () => {
+      const result = await registerAction({
+        role: "customer",
+        name: customerData.name,
+        email: customerData.email,
+        phone: customerData.phone,
+        address: customerData.address,
+        password: customerData.password,
+      })
+
+      if (!result.success || !result.user) {
+        setError(result.error || "Unable to create account.")
+        return
+      }
+
+      const user = result.user as SessionUser
       router.push("/customer/dashboard")
-    }, 1000)
+    })
   }
 
-  const handleInstallerSubmit = async (e: React.FormEvent) => {
+  const handleInstallerSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
     if (installerData.password !== installerData.confirmPassword) {
-      setError("Passwords do not match")
+      setError("Passwords do not match.")
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "installer",
-          email: installerData.email,
-          name: installerData.companyName,
-          verified: false,
-        }),
-      )
+    startTransition(async () => {
+      const result = await registerAction({
+        role: "installer",
+        name: installerData.companyName,
+        companyName: installerData.companyName,
+        registrationNumber: installerData.registrationNumber,
+        description: installerData.description,
+        email: installerData.email,
+        phone: installerData.phone,
+        address: installerData.address,
+        password: installerData.password,
+      })
+
+      if (!result.success || !result.user) {
+        setError(result.error || "Unable to create account.")
+        return
+      }
+
       router.push("/installer/dashboard")
-    }, 1000)
+    })
   }
 
   return (
@@ -101,14 +123,19 @@ function RegisterForm() {
           <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center">
             <Sun className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-semibold text-foreground">CEB Solar</span>
+          <span className="text-xl font-semibold text-foreground">
+            CEB Solar
+          </span>
         </Link>
 
-        <Card className="border-border">
+        <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-foreground">Create Account</CardTitle>
-            <CardDescription>Register to start your solar journey</CardDescription>
+            <CardTitle className="text-2xl">Create Account</CardTitle>
+            <CardDescription>
+              Register to start your solar journey
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -122,230 +149,201 @@ function RegisterForm() {
                 </TabsTrigger>
               </TabsList>
 
-              {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-4">{error}</div>}
+              {error && (
+                <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-4">
+                  {error}
+                </div>
+              )}
 
+              {/* Customer */}
               <TabsContent value="customer">
                 <form onSubmit={handleCustomerSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-name">Full Name</Label>
+                  <Field label="Full Name">
                     <Input
-                      id="customer-name"
-                      placeholder="Enter your full name"
                       value={customerData.name}
-                      onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
+                      onChange={(e) =>
+                        setCustomerData({ ...customerData, name: e.target.value })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-email">Email</Label>
+                  <Field label="Email">
                     <Input
-                      id="customer-email"
                       type="email"
-                      placeholder="Enter your email"
                       value={customerData.email}
-                      onChange={(e) => setCustomerData({ ...customerData, email: e.target.value })}
+                      onChange={(e) =>
+                        setCustomerData({ ...customerData, email: e.target.value })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-phone">Phone Number</Label>
+                  <Field label="Phone">
                     <Input
-                      id="customer-phone"
-                      type="tel"
-                      placeholder="Enter your phone number"
                       value={customerData.phone}
-                      onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
+                      onChange={(e) =>
+                        setCustomerData({ ...customerData, phone: e.target.value })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-address">Address</Label>
+                  <Field label="Address">
                     <Textarea
-                      id="customer-address"
-                      placeholder="Enter your address"
                       value={customerData.address}
-                      onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
+                      onChange={(e) =>
+                        setCustomerData({ ...customerData, address: e.target.value })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="customer-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Create a password"
-                        value={customerData.password}
-                        onChange={(e) => setCustomerData({ ...customerData, password: e.target.value })}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
+                  <PasswordField
+                    label="Password"
+                    value={customerData.password}
+                    onChange={(v) =>
+                      setCustomerData({ ...customerData, password: v })
+                    }
+                    show={showPassword}
+                    toggle={() => setShowPassword((p) => !p)}
+                  />
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customer-confirm-password">Confirm Password</Label>
+                  <Field label="Confirm Password">
                     <Input
-                      id="customer-confirm-password"
                       type="password"
-                      placeholder="Confirm your password"
                       value={customerData.confirmPassword}
-                      onChange={(e) => setCustomerData({ ...customerData, confirmPassword: e.target.value })}
+                      onChange={(e) =>
+                        setCustomerData({
+                          ...customerData,
+                          confirmPassword: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <Button
-                    type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
-                  >
+                  <Button className="w-full bg-emerald-500 text-white" disabled={loading}>
                     {loading ? "Creating Account..." : "Create Customer Account"}
                   </Button>
                 </form>
               </TabsContent>
 
+              {/* Installer */}
               <TabsContent value="installer">
                 <form onSubmit={handleInstallerSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="company-name">Company Name</Label>
+                  <Field label="Company Name">
                     <Input
-                      id="company-name"
-                      placeholder="Enter company name"
                       value={installerData.companyName}
-                      onChange={(e) => setInstallerData({ ...installerData, companyName: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          companyName: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="registration-number">Business Registration Number</Label>
+                  <Field label="Registration Number">
                     <Input
-                      id="registration-number"
-                      placeholder="Enter registration number"
                       value={installerData.registrationNumber}
-                      onChange={(e) => setInstallerData({ ...installerData, registrationNumber: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          registrationNumber: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-email">Email</Label>
+                  <Field label="Email">
                     <Input
-                      id="installer-email"
                       type="email"
-                      placeholder="Enter company email"
                       value={installerData.email}
-                      onChange={(e) => setInstallerData({ ...installerData, email: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          email: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-phone">Phone Number</Label>
+                  <Field label="Phone">
                     <Input
-                      id="installer-phone"
-                      type="tel"
-                      placeholder="Enter contact number"
                       value={installerData.phone}
-                      onChange={(e) => setInstallerData({ ...installerData, phone: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          phone: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-address">Business Address</Label>
+                  <Field label="Address">
                     <Textarea
-                      id="installer-address"
-                      placeholder="Enter business address"
                       value={installerData.address}
-                      onChange={(e) => setInstallerData({ ...installerData, address: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          address: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-description">Company Description</Label>
+                  <Field label="Description">
                     <Textarea
-                      id="installer-description"
-                      placeholder="Describe your company and services"
                       value={installerData.description}
-                      onChange={(e) => setInstallerData({ ...installerData, description: e.target.value })}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          description: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Company Documents</Label>
-                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                      <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Upload registration certificate, licenses, and other documents
-                      </p>
-                      <input type="file" className="hidden" id="documents" multiple accept=".pdf,.jpg,.png" />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="mt-2 bg-transparent"
-                        onClick={() => document.getElementById("documents")?.click()}
-                      >
-                        Select Files
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="installer-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Create a password"
-                        value={installerData.password}
-                        onChange={(e) => setInstallerData({ ...installerData, password: e.target.value })}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="installer-confirm-password">Confirm Password</Label>
+                  <Field label="Password">
                     <Input
-                      id="installer-confirm-password"
                       type="password"
-                      placeholder="Confirm your password"
-                      value={installerData.confirmPassword}
-                      onChange={(e) => setInstallerData({ ...installerData, confirmPassword: e.target.value })}
+                      value={installerData.password}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          password: e.target.value,
+                        })
+                      }
                       required
                     />
-                  </div>
+                  </Field>
+
+                  <Field label="Confirm Password">
+                    <Input
+                      type="password"
+                      value={installerData.confirmPassword}
+                      onChange={(e) =>
+                        setInstallerData({
+                          ...installerData,
+                          confirmPassword: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </Field>
 
                   <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 text-sm">
-                    Note: Your account will need to be verified by a CEB officer before you can receive customer orders.
+                    Your account will be reviewed by a CEB officer before activation.
                   </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
-                  >
+                  <Button className="w-full bg-emerald-500 text-white" disabled={loading}>
                     {loading ? "Creating Account..." : "Create Installer Account"}
                   </Button>
                 </form>
@@ -354,7 +352,10 @@ function RegisterForm() {
 
             <div className="mt-6 text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/login" className="text-emerald-500 hover:text-emerald-600 font-medium">
+              <Link
+                href="/login"
+                className="text-emerald-500 hover:text-emerald-600 font-medium"
+              >
                 Sign In
               </Link>
             </div>
@@ -365,9 +366,67 @@ function RegisterForm() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  show,
+  toggle,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  show: boolean
+  toggle: () => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="relative">
+        <Input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required
+        />
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Loading...
+        </div>
+      }
+    >
       <RegisterForm />
     </Suspense>
   )
