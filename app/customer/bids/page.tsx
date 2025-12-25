@@ -1,41 +1,53 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer } from "lucide-react"
-
-// Demo bid sessions
-const demoBidSessions = [
-  {
-    id: "BID-001",
-    applicationId: "APP-001",
-    startedAt: "2024-01-20T10:00:00Z",
-    expiresAt: "2024-01-22T10:00:00Z",
-    status: "open" as const,
-    bidsCount: 3,
-  },
-  {
-    id: "BID-002",
-    applicationId: "APP-002",
-    startedAt: "2024-01-15T08:00:00Z",
-    expiresAt: "2024-01-17T08:00:00Z",
-    status: "closed" as const,
-    bidsCount: 5,
-    selectedBid: {
-      installerName: "Solar Pro Ltd",
-      price: 420000,
-    },
-  },
-]
+import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer, Loader2 } from "lucide-react"
+import { getUser, type BidSession, type User } from "@/lib/auth"
 
 export default function CustomerBids() {
-  const [bidSessions] = useState(demoBidSessions)
+  const [user, setUser] = useState<User | null>(null)
+  const [bidSessions, setBidSessions] = useState<BidSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => new Date())
 
-  const getStatusBadge = (status: string) => {
+  useEffect(() => {
+    setUser(getUser())
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000 * 60)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    const customerId = user.id ?? "CUST-001"
+
+    const fetchSessions = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/bids?customerId=${customerId}`)
+        if (!res.ok) throw new Error("Failed to load bid sessions")
+        const data = await res.json()
+        setBidSessions(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unexpected error")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSessions()
+  }, [user])
+
+  const getStatusBadge = (status: BidSession["status"]) => {
     switch (status) {
       case "open":
         return (
@@ -58,23 +70,32 @@ export default function CustomerBids() {
             Expired
           </Badge>
         )
-      default:
-        return null
     }
   }
 
   const getTimeRemaining = (expiresAt: string) => {
-    const now = new Date()
-    const expiry = new Date(expiresAt)
-    const diff = expiry.getTime() - now.getTime()
-
+    const diff = new Date(expiresAt).getTime() - now.getTime()
     if (diff <= 0) return "Expired"
 
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
 
+    if (days > 0) {
+      return `${days}d ${remainingHours}h remaining`
+    }
     return `${hours}h ${minutes}m remaining`
   }
+
+  const enrichedSessions = useMemo(() => {
+    return bidSessions.map((session) => {
+      const selectedBid = session.selectedBidId
+        ? session.bids.find((bid) => bid.id === session.selectedBidId)
+        : undefined
+      return { ...session, selectedBid }
+    })
+  }, [bidSessions])
 
   return (
     <DashboardLayout>
@@ -101,9 +122,8 @@ export default function CustomerBids() {
               <div className="text-sm">
                 <p className="font-medium text-foreground">How Bidding Works</p>
                 <p className="text-muted-foreground">
-                  When you open a bid, installers have 48 hours to submit their proposals. You can review and select the
-                  best offer. If no bid is selected within 48 hours, the bid expires and you can browse packages
-                  directly.
+                  When you open a bid, installers have 48 hours to submit proposals. Accept a bid to move the linked
+                  application into installation, or let it expire to choose packages directly.
                 </p>
               </div>
             </div>
@@ -113,11 +133,20 @@ export default function CustomerBids() {
         {/* Bid Sessions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Bid Sessions ({bidSessions.length})</CardTitle>
+            <CardTitle className="text-foreground">Bid Sessions ({enrichedSessions.length})</CardTitle>
             <CardDescription>View and manage your active and past bid sessions</CardDescription>
           </CardHeader>
           <CardContent>
-            {bidSessions.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading bid sessions...
+              </div>
+            ) : error ? (
+              <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+                {error}
+              </div>
+            ) : enrichedSessions.length === 0 ? (
               <div className="text-center py-12">
                 <Gavel className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No bid sessions yet</h3>
@@ -131,7 +160,7 @@ export default function CustomerBids() {
               </div>
             ) : (
               <div className="space-y-4">
-                {bidSessions.map((session) => (
+                {enrichedSessions.map((session) => (
                   <div
                     key={session.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border border-border"
@@ -141,13 +170,19 @@ export default function CustomerBids() {
                         <Gavel className="w-6 h-6 text-amber-500" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold text-foreground">{session.id}</p>
                           {getStatusBadge(session.status)}
+                          <Badge variant="outline" className="text-xs">
+                            {session.bidType === "open" ? "Open Bid" : "Specific Installer"}
+                          </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Application: {session.applicationId} • {session.bidsCount} bids received
+                          Application: {session.applicationId} • {session.bids.length} bids received
                         </p>
+                        {session.applicationDetails?.address && (
+                          <p className="text-xs text-muted-foreground">{session.applicationDetails.address}</p>
+                        )}
                         {session.status === "open" && (
                           <p className="text-xs text-amber-500 mt-1">{getTimeRemaining(session.expiresAt)}</p>
                         )}

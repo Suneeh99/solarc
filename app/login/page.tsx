@@ -30,12 +30,21 @@ export default function LoginPage() {
     setTimeout(() => {
       // Demo accounts for testing
       if (formData.email === "customer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "customer", email: formData.email, name: "John Customer" }))
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ id: "CUST-001", role: "customer", email: formData.email, name: "John Customer" }),
+        )
         router.push("/customer/dashboard")
       } else if (formData.email === "installer@demo.com") {
         localStorage.setItem(
           "user",
-          JSON.stringify({ role: "installer", email: formData.email, name: "Solar Pro Ltd", verified: true }),
+          JSON.stringify({
+            id: "INS-001",
+            role: "installer",
+            email: formData.email,
+            name: "Solar Pro Ltd",
+            verified: true,
+          }),
         )
         router.push("/installer/dashboard")
       } else if (formData.email === "officer@demo.com") {
