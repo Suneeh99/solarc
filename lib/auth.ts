@@ -133,9 +133,10 @@ export interface MonthlyBill {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    const message = (data && (data as any).error) || response.statusText
+    const message = (data as any)?.error || response.statusText
     throw new Error(message || "Request failed")
   }
+
   return response.json() as Promise<T>
 }
 
@@ -186,15 +187,24 @@ export async function fetchApplications(): Promise<Application[]> {
   return data.applications
 }
 
-export async function fetchApplication(reference: string): Promise<Application | null> {
-  const response = await fetch(`/api/applications/${reference}`, { cache: "no-store" })
+export async function fetchApplication(
+  reference: string
+): Promise<Application | null> {
+  const response = await fetch(`/api/applications/${reference}`, {
+    cache: "no-store",
+  })
   if (response.status === 404) return null
   const data = await handleResponse<{ application: Application }>(response)
   return data.application
 }
 
-export async function fetchInstallers(verifiedOnly = true): Promise<Installer[]> {
-  const url = verifiedOnly ? "/api/installers?verified=true" : "/api/installers"
+export async function fetchInstallers(
+  verifiedOnly = true
+): Promise<Installer[]> {
+  const url = verifiedOnly
+    ? "/api/installers?verified=true"
+    : "/api/installers"
+
   const response = await fetch(url, { cache: "no-store" })
   const data = await handleResponse<{ installers: Installer[] }>(response)
   return data.installers
@@ -206,13 +216,19 @@ export async function fetchBidSessions(): Promise<BidSession[]> {
   return data.bidSessions
 }
 
-export async function fetchPayments(): Promise<{ invoices: Invoice[]; monthlyBills: MonthlyBill[] }> {
+export async function fetchPayments(): Promise<{
+  invoices: Invoice[]
+  monthlyBills: MonthlyBill[]
+}> {
   const response = await fetch("/api/payments", { cache: "no-store" })
-  const data = await handleResponse<{ invoices: Invoice[]; monthlyBills: MonthlyBill[] }>(response)
+  const data = await handleResponse<{
+    invoices: Invoice[]
+    monthlyBills: MonthlyBill[]
+  }>(response)
   return data
 }
 
-export async function fetchUsers() {
+export async function fetchUsers(): Promise<User[]> {
   const response = await fetch("/api/users", { cache: "no-store" })
   const data = await handleResponse<{ users: User[] }>(response)
   return data.users

@@ -8,7 +8,10 @@ function mapBid(bid: any, applicationReference: string) {
     id: bid.id,
     applicationId: applicationReference,
     installerId: bid.organizationId || bid.installerId || "",
-    installerName: bid.organization?.name || bid.installer?.name || "Installer",
+    installerName:
+      bid.organization?.name ||
+      bid.installer?.name ||
+      "Installer",
     price: bid.price,
     proposal: bid.proposal,
     warranty: bid.warranty,
@@ -26,7 +29,9 @@ function mapSession(session: any) {
     startedAt: session.startedAt,
     expiresAt: session.expiresAt,
     status: session.status,
-    bids: session.bids.map((bid: any) => mapBid(bid, session.application.reference)),
+    bids: session.bids.map((bid: any) =>
+      mapBid(bid, session.application.reference)
+    ),
   }
 }
 
@@ -41,16 +46,20 @@ export async function GET() {
       user.role === "customer"
         ? { customerId: user.id }
         : user.role === "installer" && user.organization
-          ? { bids: { some: { organizationId: user.organization.id } } }
-          : undefined,
+        ? { bids: { some: { organizationId: user.organization.id } } }
+        : undefined,
     include: {
       application: true,
-      bids: { include: { installer: true, organization: true, package: true } },
+      bids: {
+        include: { installer: true, organization: true, package: true },
+      },
     },
     orderBy: { startedAt: "desc" },
   })
 
-  return NextResponse.json({ bidSessions: sessions.map(mapSession) })
+  return NextResponse.json({
+    bidSessions: sessions.map(mapSession),
+  })
 }
 
 export async function POST(request: Request) {
@@ -60,7 +69,9 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const application = await prisma.application.findFirst({ where: { reference: body.applicationId } })
+  const application = await prisma.application.findFirst({
+    where: { reference: body.applicationId },
+  })
 
   if (!application) {
     return NextResponse.json({ error: "Application not found" }, { status: 404 })
@@ -71,22 +82,40 @@ export async function POST(request: Request) {
       where: { applicationId: application.id },
       update: {
         status: "open",
-        expiresAt: addHours(new Date(), Number(body.expiresInDays || 2) * 24),
+        expiresAt: addHours(
+          new Date(),
+          Number(body.expiresInDays || 2) * 24
+        ),
       },
       create: {
         applicationId: application.id,
         customerId: application.customerId,
         status: "open",
         startedAt: new Date(),
-        expiresAt: addHours(new Date(), Number(body.expiresInDays || 2) * 24),
+        expiresAt: addHours(
+          new Date(),
+          Number(body.expiresInDays || 2) * 24
+        ),
       },
-      include: { application: true, bids: { include: { installer: true, organization: true, package: true } } },
+      include: {
+        application: true,
+        bids: {
+          include: { installer: true, organization: true, package: true },
+        },
+      },
     })
-    return NextResponse.json({ bidSession: mapSession(session) }, { status: 201 })
+
+    return NextResponse.json(
+      { bidSession: mapSession(session) },
+      { status: 201 }
+    )
   }
 
   if (user.role !== "installer" || !user.organization) {
-    return NextResponse.json({ error: "Only installers can submit bids" }, { status: 403 })
+    return NextResponse.json(
+      { error: "Only installers can submit bids" },
+      { status: 403 }
+    )
   }
 
   const session =
@@ -121,8 +150,15 @@ export async function POST(request: Request) {
       estimatedDays: body.estimatedDays || 7,
       status: "pending",
     },
-    include: { installer: true, organization: true, package: true },
+    include: {
+      installer: true,
+      organization: true,
+      package: true,
+    },
   })
 
-  return NextResponse.json({ bid: mapBid(bid, application.reference) }, { status: 201 })
+  return NextResponse.json(
+    { bid: mapBid(bid, application.reference) },
+    { status: 201 }
+  )
 }

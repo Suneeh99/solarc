@@ -2,16 +2,25 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@/lib/services/auth"
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   const user = await currentUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const body = await request.json()
+
   const bid = await prisma.bid.findUnique({
     where: { id: params.id },
-    include: { application: true, installer: true, organization: true, package: true },
+    include: {
+      application: true,
+      installer: true,
+      organization: true,
+      package: true,
+    },
   })
 
   if (!bid) {
@@ -24,16 +33,27 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   const updated = await prisma.bid.update({
     where: { id: params.id },
-    data: { status: body.status ?? bid.status },
-    include: { application: true, installer: true, organization: true, package: true },
+    data: {
+      status: body.status ?? bid.status,
+    },
+    include: {
+      application: true,
+      installer: true,
+      organization: true,
+      package: true,
+    },
   })
 
   return NextResponse.json({
     bid: {
       id: updated.id,
       applicationId: updated.application.reference,
-      installerId: updated.organizationId || updated.installerId || "",
-      installerName: updated.organization?.name || updated.installer?.name || "Installer",
+      installerId:
+        updated.organizationId || updated.installerId || "",
+      installerName:
+        updated.organization?.name ||
+        updated.installer?.name ||
+        "Installer",
       price: updated.price,
       proposal: updated.proposal,
       warranty: updated.warranty,

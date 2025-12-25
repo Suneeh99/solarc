@@ -17,11 +17,11 @@ function mapApplication(application: any) {
     rejectionReason: application.rejectionReason,
     selectedInstaller: application.installerOrganization
       ? {
-        id: application.installerOrganization.id,
-        name: application.installerOrganization.name,
-        packageName: application.selectedPackage?.name,
-        price: application.selectedPackage?.price,
-      }
+          id: application.installerOrganization.id,
+          name: application.installerOrganization.name,
+          packageName: application.selectedPackage?.name,
+          price: application.selectedPackage?.price,
+        }
       : undefined,
     bidId: application.bids[0]?.id,
     invoices: application.invoices,
@@ -38,8 +38,8 @@ export async function GET() {
     user.role === "customer"
       ? { customerId: user.id }
       : user.role === "installer" && user.organization
-        ? { installerOrganizationId: user.organization.id }
-        : {}
+      ? { installerOrganizationId: user.organization.id }
+      : {}
 
   const applications = await prisma.application.findMany({
     where,
@@ -53,7 +53,9 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   })
 
-  return NextResponse.json({ applications: applications.map(mapApplication) })
+  return NextResponse.json({
+    applications: applications.map(mapApplication),
+  })
 }
 
 export async function POST(request: Request) {
@@ -63,7 +65,8 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const reference = body.reference || `APP-${Math.floor(Math.random() * 900 + 100)}`
+  const reference =
+    body.reference || `APP-${Math.floor(Math.random() * 900 + 100)}`
 
   try {
     const application = await prisma.application.create({
@@ -85,9 +88,16 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ application: mapApplication(application) }, { status: 201 })
+    return NextResponse.json(
+      { application: mapApplication(application) },
+      { status: 201 }
+    )
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create application"
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to create application"
+
     return NextResponse.json({ error: message }, { status: 400 })
   }
 }
