@@ -131,19 +131,15 @@ export interface MonthlyBill {
   createdAt: string
 }
 
-export function getUser(): User | null {
+export async function fetchCurrentUser(): Promise<User | null> {
   if (typeof window === "undefined") return null
-  const userStr = localStorage.getItem("user")
-  if (!userStr) return null
-  try {
-    return JSON.parse(userStr)
-  } catch {
-    return null
-  }
+  const res = await fetch("/api/auth/me", { cache: "no-store" })
+  if (!res.ok) return null
+  return res.json()
 }
 
-export function logout() {
-  localStorage.removeItem("user")
+export async function logout() {
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined)
   window.location.href = "/login"
 }
 

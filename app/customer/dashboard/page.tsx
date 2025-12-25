@@ -21,7 +21,7 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react"
-import { getUser, getDemoApplications, type Application } from "@/lib/auth"
+import { fetchCurrentUser, getDemoApplications, type Application, type User } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -44,11 +44,11 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 }
 
 export default function CustomerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
 
   useEffect(() => {
-    setUser(getUser())
+    fetchCurrentUser().then(setUser)
     // Load demo applications
     const demoApps = getDemoApplications().filter((app) => app.customerId === "CUST-001")
     setApplications(demoApps)

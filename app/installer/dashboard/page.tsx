@@ -18,13 +18,13 @@ import {
   Plus,
   Clock,
 } from "lucide-react"
-import { getUser } from "@/lib/auth"
+import { fetchCurrentUser, type User } from "@/lib/auth"
 
 export default function InstallerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    setUser(getUser())
+    fetchCurrentUser().then(setUser)
   }, [])
 
   const isVerified = user?.verified !== false

@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useActionState } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Sun, Eye, EyeOff, Upload, Building, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,16 +12,16 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { registerAction } from "@/app/actions/auth"
 
 function RegisterForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const defaultRole = searchParams.get("role") || "customer"
 
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState(defaultRole)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [state, formAction, pending] = useActionState(registerAction, null)
+  const [error, setError] = useState<string | null>(null)
 
   const [customerData, setCustomerData] = useState({
     name: "",
@@ -47,52 +47,11 @@ function RegisterForm() {
     setActiveTab(defaultRole)
   }, [defaultRole])
 
-  const handleCustomerSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-
-    if (customerData.password !== customerData.confirmPassword) {
-      setError("Passwords do not match")
-      return
+  useEffect(() => {
+    if (state?.error) {
+      setError(state.error)
     }
-
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "customer",
-          email: customerData.email,
-          name: customerData.name,
-        }),
-      )
-      router.push("/customer/dashboard")
-    }, 1000)
-  }
-
-  const handleInstallerSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-
-    if (installerData.password !== installerData.confirmPassword) {
-      setError("Passwords do not match")
-      return
-    }
-
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "installer",
-          email: installerData.email,
-          name: installerData.companyName,
-          verified: false,
-        }),
-      )
-      router.push("/installer/dashboard")
-    }, 1000)
-  }
+  }, [state])
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 py-8">
@@ -125,15 +84,15 @@ function RegisterForm() {
               {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-4">{error}</div>}
 
               <TabsContent value="customer">
-                <form onSubmit={handleCustomerSubmit} className="space-y-4">
+                <form action={formAction} className="space-y-4">
+                  <input type="hidden" name="role" value="customer" />
                   <div className="space-y-2">
                     <Label htmlFor="customer-name">Full Name</Label>
                     <Input
                       id="customer-name"
                       placeholder="Enter your full name"
-                      value={customerData.name}
-                      onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
                       required
+                      name="name"
                     />
                   </div>
 
@@ -143,9 +102,8 @@ function RegisterForm() {
                       id="customer-email"
                       type="email"
                       placeholder="Enter your email"
-                      value={customerData.email}
-                      onChange={(e) => setCustomerData({ ...customerData, email: e.target.value })}
                       required
+                      name="email"
                     />
                   </div>
 
@@ -155,9 +113,8 @@ function RegisterForm() {
                       id="customer-phone"
                       type="tel"
                       placeholder="Enter your phone number"
-                      value={customerData.phone}
-                      onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
                       required
+                      name="phone"
                     />
                   </div>
 
@@ -166,9 +123,8 @@ function RegisterForm() {
                     <Textarea
                       id="customer-address"
                       placeholder="Enter your address"
-                      value={customerData.address}
-                      onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
                       required
+                      name="address"
                     />
                   </div>
 
@@ -179,10 +135,9 @@ function RegisterForm() {
                         id="customer-password"
                         type={showPassword ? "text" : "password"}
                         placeholder="Create a password"
-                        value={customerData.password}
-                        onChange={(e) => setCustomerData({ ...customerData, password: e.target.value })}
-                        required
-                      />
+                      required
+                      name="password"
+                    />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -199,32 +154,31 @@ function RegisterForm() {
                       id="customer-confirm-password"
                       type="password"
                       placeholder="Confirm your password"
-                      value={customerData.confirmPassword}
-                      onChange={(e) => setCustomerData({ ...customerData, confirmPassword: e.target.value })}
                       required
+                      name="confirmPassword"
                     />
                   </div>
 
                   <Button
                     type="submit"
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
+                    disabled={pending}
                   >
-                    {loading ? "Creating Account..." : "Create Customer Account"}
+                    {pending ? "Creating Account..." : "Create Customer Account"}
                   </Button>
                 </form>
               </TabsContent>
 
               <TabsContent value="installer">
-                <form onSubmit={handleInstallerSubmit} className="space-y-4">
+                <form action={formAction} className="space-y-4">
+                  <input type="hidden" name="role" value="installer" />
                   <div className="space-y-2">
                     <Label htmlFor="company-name">Company Name</Label>
                     <Input
                       id="company-name"
                       placeholder="Enter company name"
-                      value={installerData.companyName}
-                      onChange={(e) => setInstallerData({ ...installerData, companyName: e.target.value })}
                       required
+                      name="companyName"
                     />
                   </div>
 
@@ -233,9 +187,8 @@ function RegisterForm() {
                     <Input
                       id="registration-number"
                       placeholder="Enter registration number"
-                      value={installerData.registrationNumber}
-                      onChange={(e) => setInstallerData({ ...installerData, registrationNumber: e.target.value })}
                       required
+                      name="registrationNumber"
                     />
                   </div>
 
@@ -245,9 +198,8 @@ function RegisterForm() {
                       id="installer-email"
                       type="email"
                       placeholder="Enter company email"
-                      value={installerData.email}
-                      onChange={(e) => setInstallerData({ ...installerData, email: e.target.value })}
                       required
+                      name="email"
                     />
                   </div>
 
@@ -257,9 +209,8 @@ function RegisterForm() {
                       id="installer-phone"
                       type="tel"
                       placeholder="Enter contact number"
-                      value={installerData.phone}
-                      onChange={(e) => setInstallerData({ ...installerData, phone: e.target.value })}
                       required
+                      name="phone"
                     />
                   </div>
 
@@ -268,9 +219,8 @@ function RegisterForm() {
                     <Textarea
                       id="installer-address"
                       placeholder="Enter business address"
-                      value={installerData.address}
-                      onChange={(e) => setInstallerData({ ...installerData, address: e.target.value })}
                       required
+                      name="address"
                     />
                   </div>
 
@@ -279,9 +229,8 @@ function RegisterForm() {
                     <Textarea
                       id="installer-description"
                       placeholder="Describe your company and services"
-                      value={installerData.description}
-                      onChange={(e) => setInstallerData({ ...installerData, description: e.target.value })}
                       required
+                      name="description"
                     />
                   </div>
 
@@ -311,10 +260,9 @@ function RegisterForm() {
                         id="installer-password"
                         type={showPassword ? "text" : "password"}
                         placeholder="Create a password"
-                        value={installerData.password}
-                        onChange={(e) => setInstallerData({ ...installerData, password: e.target.value })}
-                        required
-                      />
+                      required
+                      name="password"
+                    />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -331,9 +279,8 @@ function RegisterForm() {
                       id="installer-confirm-password"
                       type="password"
                       placeholder="Confirm your password"
-                      value={installerData.confirmPassword}
-                      onChange={(e) => setInstallerData({ ...installerData, confirmPassword: e.target.value })}
                       required
+                      name="confirmPassword"
                     />
                   </div>
 
@@ -344,9 +291,9 @@ function RegisterForm() {
                   <Button
                     type="submit"
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
+                    disabled={pending}
                   >
-                    {loading ? "Creating Account..." : "Create Installer Account"}
+                    {pending ? "Creating Account..." : "Create Installer Account"}
                   </Button>
                 </form>
               </TabsContent>

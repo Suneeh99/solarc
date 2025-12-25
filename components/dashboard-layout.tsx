@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getUser, logout, type User, type UserRole } from "@/lib/auth"
+import { fetchCurrentUser, logout, type User, type UserRole } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { NotificationProvider, NotificationBell } from "@/components/notifications"
 
@@ -77,12 +77,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    const currentUser = getUser()
-    if (!currentUser) {
-      router.push("/login")
-      return
+    let cancelled = false
+    fetchCurrentUser().then((currentUser) => {
+      if (cancelled) return
+      if (!currentUser) {
+        router.push("/login")
+        return
+      }
+      setUser(currentUser)
+    })
+    return () => {
+      cancelled = true
     }
-    setUser(currentUser)
   }, [router])
 
   if (!user) {

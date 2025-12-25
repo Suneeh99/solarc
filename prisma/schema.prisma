@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  customer
+  installer
+  officer
+}
+
+enum ApplicationStatus {
+  pending
+  under_review
+  site_visit_scheduled
+  approved
+  rejected
+  payment_pending
+  payment_confirmed
+  finding_installer
+  installation_in_progress
+  installation_complete
+  final_inspection
+  agreement_pending
+  completed
+}
+
+enum BidStatus {
+  pending
+  accepted
+  rejected
+  expired
+}
+
+enum InvoiceType {
+  authority_fee
+  installation
+  monthly_bill
+}
+
+enum InvoiceStatus {
+  pending
+  paid
+  overdue
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+}
+
+model User {
+  id              String          @id @default(cuid())
+  name            String
+  email           String          @unique
+  passwordHash    String
+  role            Role
+  phone           String?
+  address         String?
+  verified        Boolean         @default(false)
+  verifiedAt      DateTime?
+  organization    Organization?   @relation(fields: [organizationId], references: [id])
+  organizationId  String?
+  applications    Application[]   @relation("CustomerApplications")
+  assignedJobs    Application[]   @relation("InstallerAssignments")
+  packages        InstallerPackage[]
+  bids            Bid[]
+  invoices        Invoice[]       @relation("UserInvoices")
+  installerBills  Invoice[]       @relation("InstallerInvoices")
+  payments        Payment[]
+  notifications   Notification[]
+  sessions        Session[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Organization {
+  id                 String             @id @default(cuid())
+  name               String
+  registrationNumber String?
+  phone              String?
+  address            String?
+  description        String?
+  verified           Boolean            @default(false)
+  verifiedAt         DateTime?
+  users              User[]
+  packages           InstallerPackage[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model Application {
+  id               String             @id @default(cuid())
+  reference        String             @unique
+  customer         User               @relation("CustomerApplications", fields: [customerId], references: [id])
+  customerId       String
+  installer        User?              @relation("InstallerAssignments", fields: [installerId], references: [id])
+  installerId      String?
+  organization     Organization?      @relation(fields: [organizationId], references: [id])
+  organizationId   String?
+  status           ApplicationStatus  @default(pending)
+  description      String?
+  location         String?
+  capacityRequested String?
+  documents        Json?
+  technicalDetails Json?
+  selectedBid      Bid?               @relation("SelectedBid", fields: [selectedBidId], references: [id])
+  selectedBidId    String?
+  bids             Bid[]              @relation("ApplicationBids")
+  invoices         Invoice[]
+  payments         Payment[]
+  meterReadings    MeterReading[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+model InstallerPackage {
+  id              String       @id @default(cuid())
+  installer       User         @relation(fields: [installerId], references: [id])
+  installerId     String
+  organization    Organization?@relation(fields: [organizationId], references: [id])
+  organizationId  String?
+  name            String
+  description     String?
+  capacity        String?
+  panelCount      Int?
+  panelType       String?
+  inverterBrand   String?
+  warranty        String?
+  price           Float
+  features        String[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Bid {
+  id             String            @id @default(cuid())
+  application    Application       @relation("ApplicationBids", fields: [applicationId], references: [id])
+  applicationId  String
+  installer      User              @relation(fields: [installerId], references: [id])
+  installerId    String
+  price          Float
+  proposal       String?
+  warranty       String?
+  estimatedDays  Int?
+  status         BidStatus         @default(pending)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  selectedFor    Application?      @relation("SelectedBid")
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  application   Application   @relation(fields: [applicationId], references: [id])
+  applicationId String
+  customer      User          @relation("UserInvoices", fields: [customerId], references: [id])
+  customerId    String
+  installer     User?         @relation("InstallerInvoices", fields: [installerId], references: [id])
+  installerId   String?
+  type          InvoiceType
+  amount        Float
+  status        InvoiceStatus @default(pending)
+  description   String?
+  dueDate       DateTime
+  paidAt        DateTime?
+  payments      Payment[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  invoiceId     String
+  application   Application?  @relation(fields: [applicationId], references: [id])
+  applicationId String?
+  user          User          @relation(fields: [userId], references: [id])
+  userId        String
+  amount        Float
+  method        String
+  status        PaymentStatus @default(pending)
+  paidAt        DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+}
+
+model MeterReading {
+  id             String       @id @default(cuid())
+  application    Application  @relation(fields: [applicationId], references: [id])
+  applicationId  String
+  readingDate    DateTime
+  kwhGenerated   Float?
+  kwhExported    Float?
+  kwhImported    Float?
+  notes          String?
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

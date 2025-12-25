@@ -9,13 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Building, Calendar, Receipt, Clock, ArrowRight, Users, TrendingUp, Zap } from "lucide-react"
-import { getUser } from "@/lib/auth"
+import { fetchCurrentUser, type User } from "@/lib/auth"
 
 export default function OfficerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    setUser(getUser())
+    fetchCurrentUser().then(setUser)
   }, [])
 
   // Demo stats

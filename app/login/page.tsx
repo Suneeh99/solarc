@@ -2,51 +2,21 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useActionState, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Sun, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { loginAction } from "@/app/actions/auth"
 
 export default function LoginPage() {
-  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect = searchParams.get("redirect") || "/customer/dashboard"
+  const [state, formAction, pending] = useActionState(loginAction, null)
   const [showPassword, setShowPassword] = useState(false)
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
-
-    // Simulate authentication - in production, this would call an API
-    setTimeout(() => {
-      // Demo accounts for testing
-      if (formData.email === "customer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "customer", email: formData.email, name: "John Customer" }))
-        router.push("/customer/dashboard")
-      } else if (formData.email === "installer@demo.com") {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ role: "installer", email: formData.email, name: "Solar Pro Ltd", verified: true }),
-        )
-        router.push("/installer/dashboard")
-      } else if (formData.email === "officer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "officer", email: formData.email, name: "CEB Officer" }))
-        router.push("/officer/dashboard")
-      } else {
-        setError("Invalid credentials. Try: customer@demo.com, installer@demo.com, or officer@demo.com")
-      }
-      setLoading(false)
-    }, 1000)
-  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -64,8 +34,9 @@ export default function LoginPage() {
             <CardDescription>Sign in to your account to continue</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
+            <form action={formAction} className="space-y-4">
+              <input type="hidden" name="redirect" value={redirect} />
+              {state?.error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{state.error}</div>}
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -73,9 +44,8 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   placeholder="Enter your email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
+                  name="email"
                 />
               </div>
 
@@ -86,13 +56,12 @@ export default function LoginPage() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
+                    name="password"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -103,9 +72,9 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                disabled={loading}
+                disabled={pending}
               >
-                {loading ? "Signing in..." : "Sign In"}
+                {pending ? "Signing in..." : "Sign In"}
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">
