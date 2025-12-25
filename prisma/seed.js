@@ -1,146 +1,155 @@
-const { PrismaClient, Role, ApplicationStatus, InvoiceStatus, InvoiceType, PaymentStatus, BidStatus } = require("@prisma/client")
+const { PrismaClient } = require("@prisma/client")
 const bcrypt = require("bcryptjs")
 
 const prisma = new PrismaClient()
 
 async function main() {
+  /* --------------------------------------------------------------- */
+  /* Reset database                                                   */
+  /* --------------------------------------------------------------- */
+
+  await prisma.notification.deleteMany()
+  await prisma.meterReading.deleteMany()
+  await prisma.invoice.deleteMany()
+  await prisma.bid.deleteMany()
+  await prisma.bidSession.deleteMany()
+  await prisma.application.deleteMany()
+  await prisma.installerPackage.deleteMany()
+  await prisma.session.deleteMany()
+  await prisma.user.deleteMany()
+  await prisma.organization.deleteMany()
+
+  /* --------------------------------------------------------------- */
+  /* Passwords                                                        */
+  /* --------------------------------------------------------------- */
+
   const password = await bcrypt.hash("password123", 10)
 
-  const officer = await prisma.user.upsert({
-    where: { email: "officer@demo.com" },
-    update: {},
-    create: {
-      name: "CEB Officer",
-      email: "officer@demo.com",
-      passwordHash: password,
-      role: Role.officer,
+  /* --------------------------------------------------------------- */
+  /* Organizations                                                    */
+  /* --------------------------------------------------------------- */
+
+  const ceb = await prisma.organization.create({
+    data: {
+      name: "CEB",
       verified: true,
     },
   })
 
-  const customer = await prisma.user.upsert({
-    where: { email: "customer@demo.com" },
-    update: {},
-    create: {
-      name: "John Customer",
-      email: "customer@demo.com",
-      passwordHash: password,
-      role: Role.customer,
-      phone: "+94 77 000 0000",
-      address: "123 Demo Street, Colombo",
-      verified: true,
-    },
-  })
-
-  const solarPro = await prisma.organization.upsert({
-    where: { id: "org-solar-pro" },
-    update: {},
-    create: {
-      id: "org-solar-pro",
+  const solarPro = await prisma.organization.create({
+    data: {
       name: "Solar Pro Ltd",
       registrationNumber: "REG-2024-001",
-      phone: "+94 11 234 5678",
-      address: "123 Solar Street, Colombo",
       description: "Leading solar installation company with 10+ years experience",
+      address: "123 Solar Street, Colombo",
+      phone: "+94 11 234 5678",
       verified: true,
-      verifiedAt: new Date(),
+      verifiedAt: new Date("2024-01-10"),
+      rating: 4.8,
+      completedInstallations: 150,
+      documents: ["cert.pdf", "license.pdf"],
     },
   })
 
-  const greenEnergy = await prisma.organization.upsert({
-    where: { id: "org-green-energy" },
-    update: {},
-    create: {
-      id: "org-green-energy",
+  const greenEnergy = await prisma.organization.create({
+    data: {
       name: "Green Energy Solutions",
       registrationNumber: "REG-2024-002",
-      phone: "+94 11 345 6789",
-      address: "456 Energy Lane, Kandy",
       description: "Eco-friendly solar solutions for residential and commercial",
+      address: "456 Energy Lane, Kandy",
+      phone: "+94 11 345 6789",
       verified: true,
-      verifiedAt: new Date(),
+      verifiedAt: new Date("2024-01-12"),
+      rating: 4.6,
+      completedInstallations: 95,
+      documents: ["cert.pdf"],
     },
   })
 
-  const installerOne = await prisma.user.upsert({
-    where: { email: "installer@demo.com" },
-    update: {},
-    create: {
-      name: "Solar Pro Ltd",
-      email: "installer@demo.com",
+  /* --------------------------------------------------------------- */
+  /* Users                                                            */
+  /* --------------------------------------------------------------- */
+
+  const officer = await prisma.user.create({
+    data: {
+      email: "officer@demo.com",
+      name: "CEB Officer",
+      role: "officer",
       passwordHash: password,
-      role: Role.installer,
-      phone: "+94 71 234 5678",
+      organizationId: ceb.id,
+      verified: true,
+    },
+  })
+
+  const customer = await prisma.user.create({
+    data: {
+      email: "customer@demo.com",
+      name: "John Customer",
+      role: "customer",
+      passwordHash: password,
+      phone: "+94 71 123 4567",
+      address: "25 Main Street, Colombo",
+      verified: true,
+    },
+  })
+
+  const installer = await prisma.user.create({
+    data: {
+      email: "installer@demo.com",
+      name: "Solar Pro Admin",
+      role: "installer",
+      passwordHash: password,
+      phone: "+94 11 222 3333",
       address: "123 Solar Street, Colombo",
       organizationId: solarPro.id,
       verified: true,
-      verifiedAt: new Date(),
     },
   })
 
-  const installerTwo = await prisma.user.upsert({
-    where: { email: "installer2@demo.com" },
-    update: {},
-    create: {
-      name: "Green Energy Solutions",
-      email: "installer2@demo.com",
-      passwordHash: password,
-      role: Role.installer,
-      phone: "+94 71 345 6789",
-      address: "456 Energy Lane, Kandy",
-      organizationId: greenEnergy.id,
-      verified: true,
-      verifiedAt: new Date(),
-    },
-  })
+  /* --------------------------------------------------------------- */
+  /* Installer packages                                               */
+  /* --------------------------------------------------------------- */
 
-  const basicPackage = await prisma.installerPackage.upsert({
-    where: { id: "pkg-basic" },
-    update: {},
-    create: {
-      id: "pkg-basic",
-      installerId: installerOne.id,
+  const basicPackage = await prisma.installerPackage.create({
+    data: {
       organizationId: solarPro.id,
       name: "Basic Solar Package",
-      description: "Starter package for small households",
       capacity: "3 kW",
       panelCount: 8,
       panelType: "Monocrystalline",
       inverterBrand: "Huawei",
       warranty: "10 years",
       price: 450000,
-      features: ["Free installation", "1 year maintenance", "Net metering setup"],
+      features: [
+        "Free installation",
+        "1 year maintenance",
+        "Net metering setup",
+      ],
     },
   })
 
-  const premiumPackage = await prisma.installerPackage.upsert({
-    where: { id: "pkg-premium" },
-    update: {},
-    create: {
-      id: "pkg-premium",
-      installerId: installerOne.id,
+  const premiumPackage = await prisma.installerPackage.create({
+    data: {
       organizationId: solarPro.id,
       name: "Premium Solar Package",
-      description: "Higher capacity with monitoring",
       capacity: "5 kW",
       panelCount: 12,
       panelType: "Monocrystalline",
       inverterBrand: "SMA",
       warranty: "15 years",
       price: 750000,
-      features: ["Free installation", "2 years maintenance", "Net metering setup", "Monitoring system"],
+      features: [
+        "Free installation",
+        "2 years maintenance",
+        "Monitoring system",
+      ],
     },
   })
 
-  await prisma.installerPackage.upsert({
-    where: { id: "pkg-economy" },
-    update: {},
-    create: {
-      id: "pkg-economy",
-      installerId: installerTwo.id,
+  await prisma.installerPackage.create({
+    data: {
       organizationId: greenEnergy.id,
       name: "Economy Package",
-      description: "Budget-friendly solar option",
       capacity: "2 kW",
       panelCount: 5,
       panelType: "Polycrystalline",
@@ -151,18 +160,18 @@ async function main() {
     },
   })
 
-  const application = await prisma.application.upsert({
-    where: { reference: "APP-001" },
-    update: {},
-    create: {
+  /* --------------------------------------------------------------- */
+  /* Application                                                      */
+  /* --------------------------------------------------------------- */
+
+  const application = await prisma.application.create({
+    data: {
       reference: "APP-001",
       customerId: customer.id,
-      installerId: installerOne.id,
-      organizationId: solarPro.id,
-      status: ApplicationStatus.approved,
-      description: "5 kW rooftop system",
-      location: "Colombo",
-      capacityRequested: "5 kW",
+      installerOrganizationId: solarPro.id,
+      selectedPackageId: basicPackage.id,
+      status: "approved",
+      siteVisitDate: new Date("2024-01-20"),
       documents: {
         nic: "nic.pdf",
         bankDetails: "bank.pdf",
@@ -177,79 +186,99 @@ async function main() {
     },
   })
 
-  const bid = await prisma.bid.upsert({
-    where: { id: "bid-demo" },
-    update: {},
-    create: {
-      id: "bid-demo",
-      applicationId: application.id,
-      installerId: installerOne.id,
-      price: 720000,
-      proposal: "Complete turnkey installation with monitoring",
-      warranty: "10 years",
-      estimatedDays: 14,
-      status: BidStatus.accepted,
-    },
-  })
+  /* --------------------------------------------------------------- */
+  /* Bid session + bid                                                 */
+  /* --------------------------------------------------------------- */
 
-  await prisma.application.update({
-    where: { id: application.id },
-    data: { selectedBidId: bid.id },
-  })
-
-  const invoice = await prisma.invoice.upsert({
-    where: { id: "inv-demo" },
-    update: {},
-    create: {
-      id: "inv-demo",
+  const bidSession = await prisma.bidSession.create({
+    data: {
       applicationId: application.id,
       customerId: customer.id,
-      installerId: installerOne.id,
-      type: InvoiceType.installation,
-      amount: 720000,
-      status: InvoiceStatus.pending,
-      description: "Installation advance",
-      dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14),
+      startedAt: new Date("2024-01-20T10:00:00Z"),
+      expiresAt: new Date("2024-01-22T10:00:00Z"),
     },
   })
 
-  await prisma.payment.upsert({
-    where: { id: "pay-demo" },
-    update: {},
-    create: {
-      id: "pay-demo",
-      invoiceId: invoice.id,
-      applicationId: application.id,
-      userId: customer.id,
-      amount: 250000,
-      method: "card",
-      status: PaymentStatus.completed,
-    },
-  })
-
-  await prisma.meterReading.upsert({
-    where: { id: "reading-demo" },
-    update: {},
-    create: {
-      id: "reading-demo",
-      applicationId: application.id,
-      readingDate: new Date(),
-      kwhGenerated: 1250,
-      kwhExported: 320,
-      kwhImported: 120,
-      notes: "Monthly net metering reading",
-    },
-  })
-
-  await prisma.notification.create({
+  await prisma.bid.create({
     data: {
-      userId: customer.id,
-      title: "Installation approved",
-      message: "Your solar installation has been approved and assigned to Solar Pro Ltd",
+      applicationId: application.id,
+      bidSessionId: bidSession.id,
+      installerId: installer.id,
+      organizationId: solarPro.id,
+      packageId: premiumPackage.id,
+      price: 420000,
+      proposal: "Premium package with upgraded inverter and monitoring",
+      warranty: "12 years",
+      estimatedDays: 7,
+      status: "pending",
     },
   })
 
-  console.log({ officer: officer.email, customer: customer.email, installer: installerOne.email, installerTwo: installerTwo.email })
+  /* --------------------------------------------------------------- */
+  /* Invoices                                                         */
+  /* --------------------------------------------------------------- */
+
+  await prisma.invoice.create({
+    data: {
+      applicationId: application.id,
+      customerId: customer.id,
+      amount: 150000,
+      description: "Authority connection fee",
+      dueDate: new Date("2024-02-01"),
+      status: "pending",
+      type: "authority_fee",
+    },
+  })
+
+  await prisma.invoice.create({
+    data: {
+      applicationId: application.id,
+      customerId: customer.id,
+      amount: 18500,
+      description: "January solar bill",
+      dueDate: new Date("2024-02-15"),
+      status: "paid",
+      type: "monthly_bill",
+      paidAt: new Date("2024-02-10"),
+    },
+  })
+
+  /* --------------------------------------------------------------- */
+  /* Meter reading                                                    */
+  /* --------------------------------------------------------------- */
+
+  await prisma.meterReading.create({
+    data: {
+      applicationId: application.id,
+      userId: officer.id,
+      month: 1,
+      year: 2024,
+      kwhGenerated: 1250,
+      kwhExported: 450,
+      kwhImported: 200,
+    },
+  })
+
+  /* --------------------------------------------------------------- */
+  /* Notifications                                                    */
+  /* --------------------------------------------------------------- */
+
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: customer.id,
+        title: "Application approved",
+        body: "Your application APP-001 has been approved. Please review payment instructions.",
+      },
+      {
+        userId: installer.id,
+        title: "New bid opportunity",
+        body: "Customer opened a new bid session for APP-001.",
+      },
+    ],
+  })
+
+  console.log("✅ Database seeded with demo data")
 }
 
 main()

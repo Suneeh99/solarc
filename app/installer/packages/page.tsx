@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,51 +8,30 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Plus, MoreVertical, Edit, Trash2, Eye, EyeOff, Zap } from "lucide-react"
-
-const demoPackages = [
-  {
-    id: "PKG-001",
-    name: "Basic Solar Package",
-    capacity: "3 kW",
-    panelCount: 8,
-    panelType: "Monocrystalline",
-    inverterBrand: "Huawei",
-    warranty: "10 years",
-    price: 450000,
-    features: ["Free installation", "1 year maintenance", "Net metering setup"],
-    active: true,
-    sales: 25,
-  },
-  {
-    id: "PKG-002",
-    name: "Premium Solar Package",
-    capacity: "5 kW",
-    panelCount: 12,
-    panelType: "Monocrystalline",
-    inverterBrand: "SMA",
-    warranty: "15 years",
-    price: 750000,
-    features: ["Free installation", "2 years maintenance", "Net metering setup", "Monitoring system"],
-    active: true,
-    sales: 18,
-  },
-  {
-    id: "PKG-003",
-    name: "Commercial Package",
-    capacity: "10 kW",
-    panelCount: 24,
-    panelType: "Monocrystalline",
-    inverterBrand: "SMA",
-    warranty: "20 years",
-    price: 1400000,
-    features: ["Free installation", "3 years maintenance", "Net metering setup", "Monitoring system", "Battery backup"],
-    active: false,
-    sales: 8,
-  },
-]
+import { fetchCurrentUser, fetchInstallers, type SolarPackage } from "@/lib/auth"
 
 export default function InstallerPackages() {
-  const [packages, setPackages] = useState(demoPackages)
+  const [packages, setPackages] = useState<(SolarPackage & { active?: boolean; sales?: number })[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    async function loadPackages() {
+      try {
+        const user = await fetchCurrentUser()
+        const installers = await fetchInstallers(false)
+        const installer = installers.find((inst) => inst.id === user?.organization?.id)
+        if (installer) {
+          setPackages(installer.packages.map((pkg) => ({ ...pkg, active: true, sales: pkg.price / 10000 })))
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load packages")
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadPackages()
+  }, [])
 
   const togglePackageStatus = (id: string) => {
     setPackages(packages.map((pkg) => (pkg.id === id ? { ...pkg, active: !pkg.active } : pkg)))
@@ -77,7 +56,16 @@ export default function InstallerPackages() {
 
         {/* Packages Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {packages.map((pkg) => (
+          {loading ? (
+            <Card className="md:col-span-2 lg:col-span-3">
+              <CardContent className="py-12 text-center text-muted-foreground">Loading packages...</CardContent>
+            </Card>
+          ) : packages.length === 0 ? (
+            <Card className="md:col-span-2 lg:col-span-3">
+              <CardContent className="py-12 text-center text-muted-foreground">No packages yet.</CardContent>
+            </Card>
+          ) : (
+            packages.map((pkg) => (
             <Card key={pkg.id} className={pkg.active ? "" : "opacity-60"}>
               <CardHeader className="flex flex-row items-start justify-between">
                 <div>
@@ -129,7 +117,7 @@ export default function InstallerPackages() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">Rs. {pkg.price.toLocaleString()}</p>
-                    <p className="text-sm text-muted-foreground">{pkg.sales} sales</p>
+                    <p className="text-sm text-muted-foreground">{pkg.sales ?? 0} sales</p>
                   </div>
                 </div>
 
@@ -162,7 +150,8 @@ export default function InstallerPackages() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            ))
+          )}
 
           {/* Add Package Card */}
           <Card className="border-dashed flex items-center justify-center min-h-[300px]">

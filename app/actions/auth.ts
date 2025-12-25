@@ -4,12 +4,20 @@ import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import { Role } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { createSession, hashPassword, verifyPassword } from "@/lib/auth-server"
+import {
+  createSession,
+  hashPassword,
+  verifyPassword,
+} from "@/lib/auth-server"
 
 export async function loginAction(_: unknown, formData: FormData) {
   const email = formData.get("email") as string
   const password = formData.get("password") as string
   const redirectTo = (formData.get("redirect") as string) || "/"
+
+  if (!email || !password) {
+    return { error: "Email and password are required" }
+  }
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
@@ -22,7 +30,13 @@ export async function loginAction(_: unknown, formData: FormData) {
   }
 
   await createSession(user.id, user.role)
-  cookies().set("last_login_email", email, { httpOnly: false, sameSite: "lax", path: "/" })
+
+  cookies().set("last_login_email", email, {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+  })
+
   redirect(redirectTo)
 }
 
@@ -39,22 +53,14 @@ export async function registerAction(_: unknown, formData: FormData) {
     return { error: "Invalid role" }
   }
 
-  const payload: Record<string, unknown> = {
-    role: role as Role,
-    name: formData.get("name"),
-    email: formData.get("email"),
-    password,
-    phone: formData.get("phone"),
-    address: formData.get("address"),
+  const email = formData.get("email") as string
+  const name = formData.get("name") as string
+
+  if (!email || !name || !password) {
+    return { error: "Missing required fields" }
   }
 
-  if (role === "installer") {
-    payload.companyName = formData.get("companyName")
-    payload.registrationNumber = formData.get("registrationNumber")
-    payload.description = formData.get("description")
-  }
-
-  const existing = await prisma.user.findUnique({ where: { email: payload.email as string } })
+  const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
     return { error: "Email already registered" }
   }
@@ -62,28 +68,33 @@ export async function registerAction(_: unknown, formData: FormData) {
   const passwordHash = await hashPassword(password)
 
   let organizationId: string | undefined
+
   if (role === "installer") {
     const org = await prisma.organization.create({
       data: {
-        name: (payload.companyName as string) || (payload.name as string),
-        registrationNumber: payload.registrationNumber as string,
-        description: payload.description as string,
-        phone: payload.phone as string,
-        address: payload.address as string,
+        name:
+          (formData.get("companyName") as string) || name,
+        registrationNumber: formData.get(
+          "registrationNumber",
+        ) as string,
+        description: formData.get("description") as string,
+        phone: formData.get("phone") as string,
+        address: formData.get("address") as string,
         verified: false,
       },
     })
+
     organizationId = org.id
   }
 
   const user = await prisma.user.create({
     data: {
-      name: payload.name as string,
-      email: payload.email as string,
+      name,
+      email,
       passwordHash,
-      role: payload.role as Role,
-      phone: payload.phone as string,
-      address: payload.address as string,
+      role: role as Role,
+      phone: formData.get("phone") as string,
+      address: formData.get("address") as string,
       organizationId,
       verified: role !== "installer",
     },
@@ -91,6 +102,9 @@ export async function registerAction(_: unknown, formData: FormData) {
 
   await createSession(user.id, user.role)
 
-  const redirectTo = role === "installer" ? "/installer/dashboard" : "/customer/dashboard"
-  redirect(redirectTo)
+  redirect(
+    role === "installer"
+      ? "/installer/dashboard"
+      : "/customer/dashboard",
+  )
 }

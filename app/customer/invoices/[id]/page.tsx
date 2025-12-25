@@ -1,231 +1,215 @@
 "use client"
 
-import { useParams } from "next/navigation"
+import type React from "react"
+
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Download, CreditCard, Building2, Calendar } from "lucide-react"
-import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { Receipt, Clock, CheckCircle, AlertCircle, Download, FileText, Zap, Mail, CreditCard } from "lucide-react"
+import { getDemoInvoices, getDemoMonthlyBills } from "@/lib/auth"
 
-const invoiceData = {
-  id: "INV-001",
-  type: "installation",
-  status: "pending",
-  createdAt: "2024-01-15",
-  dueDate: "2024-01-30",
-  installer: {
-    name: "SunPower Lanka",
-    address: "45 Solar Avenue, Colombo 03",
-    phone: "+94 11 234 5678",
-    email: "billing@sunpowerlanka.lk",
-    regNumber: "REG-2024-001",
-  },
-  customer: {
-    name: "John Smith",
-    address: "123 Solar Lane, Colombo 07",
-    phone: "+94 77 123 4567",
-    accountNumber: "0712345678",
-  },
-  application: {
-    id: "APP-001",
-    capacity: "5 kW",
-  },
-  items: [
-    { description: "Solar Panels - Jinko Tiger Neo N-type (10 units)", quantity: 10, unitPrice: 65000, total: 650000 },
-    { description: "Inverter - Huawei SUN2000-5KTL", quantity: 1, unitPrice: 180000, total: 180000 },
-    { description: "Mounting Structure & Hardware", quantity: 1, unitPrice: 120000, total: 120000 },
-    { description: "Wiring & Electrical Components", quantity: 1, unitPrice: 85000, total: 85000 },
-    { description: "Installation Labor", quantity: 1, unitPrice: 150000, total: 150000 },
-    { description: "CEB Grid Connection Fee", quantity: 1, unitPrice: 15000, total: 15000 },
-  ],
-  subtotal: 1200000,
-  tax: 50000,
-  total: 1250000,
-  payments: [{ date: "2024-01-16", amount: 500000, method: "Bank Transfer", reference: "TRF-20240116-001" }],
-  balanceDue: 750000,
+const invoices = getDemoInvoices()
+const bills = getDemoMonthlyBills()
+
+function getStatusBadge(status: string) {
+  const styles: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+    pending: { color: "bg-amber-500/10 text-amber-600", icon: Clock, label: "Pending" },
+    paid: { color: "bg-emerald-500/10 text-emerald-600", icon: CheckCircle, label: "Paid" },
+    overdue: { color: "bg-red-500/10 text-red-600", icon: AlertCircle, label: "Overdue" },
+  }
+  const { color, icon: Icon, label } = styles[status] || styles.pending
+  return (
+    <Badge className={color} variant="secondary">
+      <Icon className="w-3 h-3 mr-1" />
+      {label}
+    </Badge>
+  )
 }
 
-export default function InvoiceDetailPage() {
-  const params = useParams()
+export default function InvoiceDetailPage({ params }: { params: { id: string } }) {
+  const invoice = invoices.find((inv) => inv.id === params.id)
+
+  if (!invoice) {
+    return (
+      <DashboardLayout>
+        <Card className="max-w-3xl mx-auto">
+          <CardHeader>
+            <CardTitle className="text-foreground">Invoice not found</CardTitle>
+            <CardDescription>The requested invoice does not exist.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/customer/invoices">Back to invoices</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    )
+  }
+
+  const bill = bills.find((b) => b.invoiceId === invoice.id)
+  const isCredit = bill ? bill.amount < 0 : invoice.amount < 0
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/customer/invoices">
-              <Button variant="ghost" size="icon" className="bg-transparent">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-foreground">{params.id}</h1>
-                <Badge
-                  className={
-                    invoiceData.status === "paid"
-                      ? "bg-emerald-500/10 text-emerald-600"
-                      : invoiceData.status === "pending"
-                        ? "bg-amber-500/10 text-amber-600"
-                        : "bg-red-500/10 text-red-600"
-                  }
-                  variant="secondary"
-                >
-                  {invoiceData.status === "paid" ? "Paid" : invoiceData.status === "pending" ? "Pending" : "Overdue"}
+      <div className="space-y-6 max-w-5xl mx-auto">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold text-foreground">{invoice?.id}</h1>
+              {invoice && getStatusBadge(invoice.status)}
+              {invoice && (
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">
+                  {invoice.type.replace("_", " ")}
                 </Badge>
-              </div>
-              <p className="text-muted-foreground">Installation Invoice</p>
+              )}
             </div>
+            <p className="text-muted-foreground mt-1">Invoice generated from payment and billing events</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="bg-transparent">
-              <Download className="w-4 h-4 mr-2" />
-              Download PDF
-            </Button>
-            {invoiceData.balanceDue > 0 && (
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                <CreditCard className="w-4 h-4 mr-2" />
-                Pay Now
+            {invoice?.pdfUrl && (
+              <Button variant="outline" asChild>
+                <a href={invoice.pdfUrl} download>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </a>
               </Button>
             )}
+            <Button variant="outline" asChild>
+              <Link href="/customer/invoices">Back to invoices</Link>
+            </Button>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">From</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                  <Building2 className="w-5 h-5 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">{invoiceData.installer.name}</p>
-                  <p className="text-sm text-muted-foreground">{invoiceData.installer.address}</p>
-                  <p className="text-sm text-muted-foreground">{invoiceData.installer.phone}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Reg: {invoiceData.installer.regNumber}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Bill To</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div>
-                <p className="font-semibold text-foreground">{invoiceData.customer.name}</p>
-                <p className="text-sm text-muted-foreground">{invoiceData.customer.address}</p>
-                <p className="text-sm text-muted-foreground">{invoiceData.customer.phone}</p>
-                <p className="text-xs text-muted-foreground mt-1">Account: {invoiceData.customer.accountNumber}</p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-foreground">Invoice Details</CardTitle>
-                <CardDescription>Application {invoiceData.application.id}</CardDescription>
-              </div>
-              <div className="text-right text-sm">
-                <p className="text-muted-foreground">
-                  <Calendar className="w-3 h-3 inline mr-1" />
-                  Issued: {invoiceData.createdAt}
-                </p>
-                <p className="text-muted-foreground">
-                  <Calendar className="w-3 h-3 inline mr-1" />
-                  Due: {invoiceData.dueDate}
-                </p>
-              </div>
-            </div>
+            <CardTitle className="text-foreground">Invoice summary</CardTitle>
+            <CardDescription>Details, delivery channel, and linked energy data</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 text-sm font-medium text-muted-foreground">Description</th>
-                    <th className="text-center py-3 text-sm font-medium text-muted-foreground">Qty</th>
-                    <th className="text-right py-3 text-sm font-medium text-muted-foreground">Unit Price</th>
-                    <th className="text-right py-3 text-sm font-medium text-muted-foreground">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoiceData.items.map((item, index) => (
-                    <tr key={index} className="border-b border-border">
-                      <td className="py-3 text-foreground">{item.description}</td>
-                      <td className="py-3 text-center text-foreground">{item.quantity}</td>
-                      <td className="py-3 text-right text-foreground">LKR {item.unitPrice.toLocaleString()}</td>
-                      <td className="py-3 text-right font-medium text-foreground">LKR {item.total.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-b border-border">
-                    <td colSpan={3} className="py-3 text-right text-muted-foreground">
-                      Subtotal
-                    </td>
-                    <td className="py-3 text-right font-medium text-foreground">
-                      LKR {invoiceData.subtotal.toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-border">
-                    <td colSpan={3} className="py-3 text-right text-muted-foreground">
-                      Tax
-                    </td>
-                    <td className="py-3 text-right font-medium text-foreground">
-                      LKR {invoiceData.tax.toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={3} className="py-3 text-right font-semibold text-foreground">
-                      Total
-                    </td>
-                    <td className="py-3 text-right text-xl font-bold text-emerald-500">
-                      LKR {invoiceData.total.toLocaleString()}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Amount</p>
+                <p className={`text-2xl font-bold ${isCredit ? "text-emerald-600" : "text-foreground"}`}>
+                  {isCredit ? "Credit " : "Rs. "}
+                  {Math.abs(invoice?.amount || 0).toLocaleString()}
+                </p>
+                {bill && bill.amount < 0 && <p className="text-xs text-muted-foreground">Net metering credit</p>}
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Application</p>
+                <p className="text-lg font-semibold text-foreground">{invoice?.applicationId}</p>
+                {invoice?.meterReadingId && (
+                  <p className="text-xs text-muted-foreground">From {invoice.meterReadingId}</p>
+                )}
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Due date</p>
+                <p className="text-lg font-semibold text-foreground">
+                  {invoice?.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : "On delivery"}
+                </p>
+                {invoice?.paidAt && <p className="text-xs text-muted-foreground">Paid {new Date(invoice.paidAt).toLocaleDateString()}</p>}
+              </div>
             </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Receipt className="w-4 h-4" />
+                  <span>Type</span>
+                </div>
+                <p className="text-sm font-semibold text-foreground capitalize">{invoice?.type.replace("_", " ")}</p>
+                <p className="text-sm text-muted-foreground">{invoice?.description}</p>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="w-4 h-4" />
+                  <span>Delivery</span>
+                </div>
+                <p className="text-sm font-semibold text-foreground">{invoice?.channel || "Email & in-app"}</p>
+                <p className="text-sm text-muted-foreground">
+                  Email notifications are dispatched to keep installers and customers aligned. In-app notifications mirror
+                  the delivery status in dashboards.
+                </p>
+              </div>
+            </div>
+
+            {invoice?.type === "authority_fee" && (
+              <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-200 flex items-start gap-3">
+                <ShieldIcon />
+                <div>
+                  <p className="text-sm font-semibold text-purple-800">Authority-fee receipt</p>
+                  <p className="text-sm text-purple-900/80">
+                    Officer approval of this receipt will unlock installation scheduling for the linked application.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {bill && (
+              <div className="p-4 rounded-lg bg-muted">
+                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-emerald-500" />
+                  Derived from meter reading {bill.meterReadingId}
+                </p>
+                <div className="grid grid-cols-3 gap-3 text-sm mt-3">
+                  <div>
+                    <p className="text-muted-foreground">Generated</p>
+                    <p className="font-semibold text-foreground">{bill.kwhGenerated} kWh</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Exported</p>
+                    <p className="font-semibold text-emerald-600">{bill.kwhExported} kWh</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Imported</p>
+                    <p className="font-semibold text-amber-600">{bill.kwhImported} kWh</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {invoiceData.payments.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground">Payment History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {invoiceData.payments.map((payment, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div>
-                      <p className="font-medium text-foreground">{payment.method}</p>
-                      <p className="text-sm text-muted-foreground">Ref: {payment.reference}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-emerald-500">LKR {payment.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">{payment.date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 p-4 bg-amber-500/10 rounded-lg flex items-center justify-between">
-                <p className="font-medium text-foreground">Balance Due</p>
-                <p className="text-xl font-bold text-amber-600">LKR {invoiceData.balanceDue.toLocaleString()}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Actions</CardTitle>
+            <CardDescription>Download, pay, or review linked documents</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {invoice?.status === "pending" && (
+              <Button className="bg-emerald-600 hover:bg-emerald-700">
+                <CreditCard className="w-4 h-4 mr-2" />
+                Complete payment
+              </Button>
+            )}
+            {invoice?.pdfUrl && (
+              <Button variant="outline" asChild>
+                <a href={invoice.pdfUrl} download>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </a>
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link href="/customer/invoices">Return to list</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
+  )
+}
+
+function ShieldIcon() {
+  return (
+    <div className="mt-1 w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+      <FileText className="w-5 h-5 text-purple-700" />
+    </div>
   )
 }

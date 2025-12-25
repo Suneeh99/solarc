@@ -1,45 +1,35 @@
-import { NextResponse, type NextRequest } from "next/server"
-import { jwtVerify } from "jose"
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session"
 
-type Role = "customer" | "installer" | "officer"
-
-const protectedRoutes = [
-  { prefix: "/customer", roles: [Role.customer] },
-  { prefix: "/installer", roles: [Role.installer] },
-  { prefix: "/officer", roles: [Role.officer] },
+const protectedRoutes: Array<{ prefix: string; role: "customer" | "installer" | "officer" }> = [
+  { prefix: "/customer", role: "customer" },
+  { prefix: "/installer", role: "installer" },
+  { prefix: "/officer", role: "officer" },
 ]
 
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
-  const match = protectedRoutes.find((route) => pathname.startsWith(route.prefix))
-  if (!match) return NextResponse.next()
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
 
-  const token = req.cookies.get("session_token")?.value
-  const secret = process.env.JWT_SECRET
-  if (!token || !secret) {
-    const url = new URL("/login", req.url)
+  const matched = protectedRoutes.find(({ prefix }) =>
+    pathname.startsWith(prefix),
+  )
+
+  if (!matched) {
+    return NextResponse.next()
+  }
+
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const session = token ? await verifySessionToken(token) : null
+
+  if (!session) {
+    const url = new URL("/login", request.url)
     url.searchParams.set("redirect", pathname)
     return NextResponse.redirect(url)
   }
 
-  let role: Role | null = null
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret))
-    role = (payload as { role?: Role }).role ?? null
-  } catch {
-    const url = new URL("/login", req.url)
-    url.searchParams.set("redirect", pathname)
-    return NextResponse.redirect(url)
-  }
-
-  if (!role) {
-    const url = new URL("/login", req.url)
-    url.searchParams.set("redirect", pathname)
-    return NextResponse.redirect(url)
-  }
-
-  if (!match.roles.includes(role)) {
-    return NextResponse.redirect(new URL("/", req.url))
+  if (session.role !== matched.role) {
+    return NextResponse.redirect(new URL("/", request.url))
   }
 
   return NextResponse.next()

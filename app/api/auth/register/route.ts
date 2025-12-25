@@ -6,26 +6,50 @@ import { createSession, hashPassword } from "@/lib/auth-server"
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, email, password, role, phone, address, companyName, registrationNumber, description } = body
 
-    if (!email || !password || !name) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+    const {
+      name,
+      email,
+      password,
+      role,
+      phone,
+      address,
+      companyName,
+      registrationNumber,
+      description,
+    } = body
+
+    if (!name || !email || !password) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      )
     }
 
     if (!Object.values(Role).includes(role)) {
-      return NextResponse.json({ error: "Invalid role" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Invalid role" },
+        { status: 400 },
+      )
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } })
+    const existing = await prisma.user.findUnique({
+      where: { email },
+    })
+
     if (existing) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Email already registered" },
+        { status: 400 },
+      )
     }
 
     const passwordHash = await hashPassword(password)
 
     let organizationId: string | undefined
+
     if (role === Role.installer) {
-      const org = await prisma.organization.create({
+      const organization = await prisma.organization.create({
         data: {
           name: companyName || name,
           registrationNumber,
@@ -35,7 +59,8 @@ export async function POST(request: Request) {
           verified: false,
         },
       })
-      organizationId = org.id
+
+      organizationId = organization.id
     }
 
     const user = await prisma.user.create({
@@ -47,7 +72,7 @@ export async function POST(request: Request) {
         phone,
         address,
         organizationId,
-        verified: role !== Role.installer ? true : false,
+        verified: role !== Role.installer,
       },
     })
 
@@ -62,6 +87,9 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: "Registration failed" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Registration failed" },
+      { status: 500 },
+    )
   }
 }
