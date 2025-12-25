@@ -166,10 +166,11 @@ export default function InstallerPackagesPage() {
     )
   }
 
+  const hasEligibleApplications = applications.length > 0
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/customer/installers">
             <Button variant="ghost" size="icon">
@@ -182,7 +183,16 @@ export default function InstallerPackagesPage() {
           </div>
         </div>
 
-        {/* Installer */}
+        {!hasEligibleApplications && (
+          <Card className="border-dashed">
+            <CardContent className="p-4">
+              <p className="text-sm text-red-500">
+                You need an approved application to select packages or request quotes.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardContent className="p-6 flex justify-between flex-wrap gap-4">
             <div className="flex gap-4">
@@ -229,7 +239,6 @@ export default function InstallerPackagesPage() {
           </CardContent>
         </Card>
 
-        {/* Packages */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -267,6 +276,12 @@ export default function InstallerPackagesPage() {
                         size="sm"
                         className="bg-emerald-500 text-white"
                         onClick={() => handleOpenBidDialog(pkg)}
+                        disabled={!hasEligibleApplications}
+                        title={
+                          !hasEligibleApplications
+                            ? "You need an approved application to request a quote"
+                            : undefined
+                        }
                       >
                         <Gavel className="w-3 h-3 mr-1" />
                         Request Bid
@@ -279,7 +294,6 @@ export default function InstallerPackagesPage() {
           </CardContent>
         </Card>
 
-        {/* Bid Dialog */}
         <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
           <DialogContent>
             <DialogHeader>
@@ -291,7 +305,10 @@ export default function InstallerPackagesPage() {
 
             <div className="space-y-4">
               <Label>Application</Label>
-              <Select value={selectedApplication} onValueChange={setSelectedApplication}>
+              <Select
+                value={selectedApplication}
+                onValueChange={setSelectedApplication}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select application" />
                 </SelectTrigger>

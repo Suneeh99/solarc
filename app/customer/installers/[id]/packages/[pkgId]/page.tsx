@@ -180,7 +180,6 @@ export default function PackageDetailPage() {
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <Link href={`/customer/installers/${installer.id}/packages`}>
             <Button variant="ghost" size="icon">
@@ -189,11 +188,12 @@ export default function PackageDetailPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold">{pkg.name}</h1>
-            <p className="text-muted-foreground">by {installer.companyName}</p>
+            <p className="text-muted-foreground">
+              by {installer.companyName}
+            </p>
           </div>
         </div>
 
-        {/* Installer */}
         <Card>
           <CardContent className="p-6 flex justify-between flex-wrap gap-4">
             <div className="flex gap-4">
@@ -232,11 +232,12 @@ export default function PackageDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Package */}
         <Card>
           <CardHeader>
             <CardTitle>Package Overview</CardTitle>
-            <CardDescription>Installation details and pricing</CardDescription>
+            <CardDescription>
+              Installation details and pricing
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-muted/50">
@@ -257,10 +258,17 @@ export default function PackageDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Bid Dialog */}
         <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
           <DialogTrigger asChild>
-            <Button className="bg-emerald-500 text-white">
+            <Button
+              className="bg-emerald-500 text-white"
+              disabled={applications.length === 0}
+              title={
+                applications.length === 0
+                  ? "You need an approved application to request a bid"
+                  : undefined
+              }
+            >
               <Gavel className="w-4 h-4 mr-2" />
               Request Bid
             </Button>

@@ -61,7 +61,6 @@ export default function CustomerInstallers() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground">Find Installer</h1>
           <p className="text-muted-foreground">
@@ -75,7 +74,6 @@ export default function CustomerInstallers() {
           </div>
         )}
 
-        {/* Search */}
         <Card>
           <CardContent className="p-4">
             <div className="relative">
@@ -90,7 +88,6 @@ export default function CustomerInstallers() {
           </CardContent>
         </Card>
 
-        {/* List */}
         {loading ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
@@ -193,7 +190,10 @@ export default function CustomerInstallers() {
                           <Link
                             href={`/customer/installers/${installer.id}/packages/${pkg.id}`}
                           >
-                            <Button size="sm" className="bg-emerald-500 text-white">
+                            <Button
+                              size="sm"
+                              className="bg-emerald-500 text-white"
+                            >
                               View
                               <ArrowRight className="w-3 h-3 ml-1" />
                             </Button>

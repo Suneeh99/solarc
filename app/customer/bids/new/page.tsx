@@ -123,7 +123,6 @@ export default function NewBidSession() {
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/customer/bids">
             <Button variant="ghost" size="icon">
@@ -146,7 +145,6 @@ export default function NewBidSession() {
           </div>
         )}
 
-        {/* Bid Type */}
         <Card>
           <CardHeader>
             <CardTitle>Bid Type</CardTitle>
@@ -191,7 +189,6 @@ export default function NewBidSession() {
           </CardContent>
         </Card>
 
-        {/* Application Selection */}
         <Card>
           <CardHeader>
             <CardTitle>Select Application</CardTitle>
@@ -235,8 +232,7 @@ export default function NewBidSession() {
                           {app.status.replace("_", " ")}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Updated{" "}
-                          {new Date(app.updatedAt).toLocaleDateString()}
+                          Updated {new Date(app.updatedAt).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
@@ -247,7 +243,6 @@ export default function NewBidSession() {
           </CardContent>
         </Card>
 
-        {/* Bid Settings */}
         <Card>
           <CardHeader>
             <CardTitle>Bid Settings</CardTitle>
@@ -298,7 +293,6 @@ export default function NewBidSession() {
           </CardContent>
         </Card>
 
-        {/* Info */}
         <Card className="bg-blue-500/5 border-blue-500/20">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -317,7 +311,6 @@ export default function NewBidSession() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
         <div className="flex gap-4">
           <Link href="/customer/bids" className="flex-1">
             <Button variant="outline" className="w-full">

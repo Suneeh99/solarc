@@ -31,6 +31,7 @@ export default function CustomerBids() {
   const [error, setError] = useState("")
   const [now, setNow] = useState(() => new Date())
 
+  // Update remaining time every minute
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60 * 1000)
     return () => clearInterval(timer)
@@ -50,6 +51,9 @@ export default function CustomerBids() {
 
     load()
   }, [])
+
+  // Until applications are fetched separately, assume the user is allowed to open bids
+  const hasApprovedApplication = true
 
   const getStatusBadge = (status: BidSession["status"]) => {
     switch (status) {
@@ -109,7 +113,6 @@ export default function CustomerBids() {
           </div>
         )}
 
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">My Bids</h1>
@@ -125,7 +128,6 @@ export default function CustomerBids() {
           </Link>
         </div>
 
-        {/* Info */}
         <Card className="bg-blue-500/5 border-blue-500/20">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -142,7 +144,6 @@ export default function CustomerBids() {
           </CardContent>
         </Card>
 
-        {/* Bid Sessions */}
         <Card>
           <CardHeader>
             <CardTitle>Bid Sessions ({enrichedSessions.length})</CardTitle>
@@ -202,11 +203,7 @@ export default function CustomerBids() {
                     </div>
 
                     <Link href={`/customer/bids/${session.id}`}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-transparent"
-                      >
+                      <Button variant="outline" size="sm">
                         View Bids
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
