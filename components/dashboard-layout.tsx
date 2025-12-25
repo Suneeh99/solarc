@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getUser, logout, type User, type UserRole } from "@/lib/auth"
+import { fetchCurrentUser, logout, type User, type UserRole } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { NotificationProvider, NotificationBell } from "@/components/notifications"
 
@@ -75,17 +75,33 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const currentUser = getUser()
-    if (!currentUser) {
-      router.push("/login")
-      return
+    async function loadUser() {
+      try {
+        const currentUser = await fetchCurrentUser()
+        if (!currentUser) {
+          router.push("/login")
+          return
+        }
+        setUser(currentUser)
+      } catch (error) {
+        console.error(error)
+        router.push("/login")
+      } finally {
+        setLoading(false)
+      }
     }
-    setUser(currentUser)
+    loadUser()
   }, [router])
 
-  if (!user) {
+  const handleLogout = async () => {
+    await logout()
+    router.push("/login")
+  }
+
+  if (!user || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -209,7 +225,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="text-destructive">
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                       <LogOut className="w-4 h-4 mr-2" />
                       Logout
                     </DropdownMenuItem>

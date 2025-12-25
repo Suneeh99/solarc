@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useTransition } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Sun, Eye, EyeOff, Upload, Building, User } from "lucide-react"
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { registerAction } from "@/app/actions/auth"
+import type { User as SessionUser } from "@/lib/auth"
 
 function RegisterForm() {
   const router = useRouter()
@@ -20,7 +22,7 @@ function RegisterForm() {
 
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState(defaultRole)
-  const [loading, setLoading] = useState(false)
+  const [loading, startTransition] = useTransition()
   const [error, setError] = useState("")
 
   const [customerData, setCustomerData] = useState({
@@ -56,18 +58,26 @@ function RegisterForm() {
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "customer",
-          email: customerData.email,
-          name: customerData.name,
-        }),
-      )
-      router.push("/customer/dashboard")
-    }, 1000)
+    startTransition(async () => {
+      const result = await registerAction({
+        role: "customer",
+        email: customerData.email,
+        password: customerData.password,
+        name: customerData.name,
+        phone: customerData.phone,
+        address: customerData.address,
+      })
+
+      if (!result.success || !result.user) {
+        setError(result.error || "Unable to create account.")
+        return
+      }
+
+      const user = result.user as SessionUser
+      if (user.role === "customer") {
+        router.push("/customer/dashboard")
+      }
+    })
   }
 
   const handleInstallerSubmit = async (e: React.FormEvent) => {
@@ -79,19 +89,29 @@ function RegisterForm() {
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "installer",
-          email: installerData.email,
-          name: installerData.companyName,
-          verified: false,
-        }),
-      )
-      router.push("/installer/dashboard")
-    }, 1000)
+    startTransition(async () => {
+      const result = await registerAction({
+        role: "installer",
+        email: installerData.email,
+        password: installerData.password,
+        name: installerData.companyName,
+        phone: installerData.phone,
+        address: installerData.address,
+        companyName: installerData.companyName,
+        registrationNumber: installerData.registrationNumber,
+        description: installerData.description,
+      })
+
+      if (!result.success || !result.user) {
+        setError(result.error || "Unable to create account.")
+        return
+      }
+
+      const user = result.user as SessionUser
+      if (user.role === "installer") {
+        router.push("/installer/dashboard")
+      }
+    })
   }
 
   return (
