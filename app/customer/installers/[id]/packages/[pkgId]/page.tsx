@@ -1,10 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -17,7 +24,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
 import {
   ArrowLeft,
   Building,
@@ -32,77 +46,128 @@ import {
   MapPin,
   Phone,
   Mail,
-  ShieldAlert,
 } from "lucide-react"
-import type { Installer, SolarPackage, Application } from "@/lib/auth"
+
+import {
+  fetchApplications,
+  fetchInstallers,
+  type Application,
+  type Installer,
+  type SolarPackage,
+} from "@/lib/auth"
 
 export default function PackageDetailPage() {
   const params = useParams()
-  const id = params.id as string
-  const pkgId = params.pkgId as string
-
   const router = useRouter()
+
+  const installerId = params.id as string
+  const packageId = params.pkgId as string
+
   const [installer, setInstaller] = useState<Installer | null>(null)
   const [pkg, setPkg] = useState<SolarPackage | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+
   const [openBidDialog, setOpenBidDialog] = useState(false)
   const [selectedApplication, setSelectedApplication] = useState("")
   const [bidDuration, setBidDuration] = useState("7")
   const [requirements, setRequirements] = useState("")
-  const [loading, setLoading] = useState(false)
+
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
 
   useEffect(() => {
-    const fetchInstaller = async () => {
-      const res = await fetch("/api/customer/installers")
-      const data = await res.json()
-      const foundInstaller = data.installers.find((i: Installer) => i.id === id)
-      if (foundInstaller) {
-        setInstaller(foundInstaller)
-        const foundPkg = foundInstaller.packages.find((p) => p.id === pkgId)
-        if (foundPkg) {
-          setPkg(foundPkg)
-          setError(null)
-        } else {
-          setError(`Package "${pkgId}" not found for installer "${foundInstaller.companyName}"`)
+    async function load() {
+      try {
+        const [installerList, applicationList] = await Promise.all([
+          fetchInstallers(true),
+          fetchApplications(),
+        ])
+
+        const foundInstaller = installerList.find((i) => i.id === installerId)
+        if (!foundInstaller) {
+          setError("Installer not found")
+          return
         }
-      } else {
-        setError(`Installer "${id}" not found`)
+
+        const foundPackage = foundInstaller.packages.find(
+          (p) => p.id === packageId,
+        )
+        if (!foundPackage) {
+          setError("Package not found")
+          return
+        }
+
+        setInstaller(foundInstaller)
+        setPkg(foundPackage)
+
+        setApplications(
+          applicationList.filter((app) =>
+            [
+              "approved",
+              "payment_confirmed",
+              "finding_installer",
+              "installation_in_progress",
+            ].includes(app.status),
+          ),
+        )
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load data")
+      } finally {
+        setLoading(false)
       }
     }
 
-    const fetchApproved = async () => {
-      const res = await fetch("/api/customer/applications/approved")
-      const data = await res.json()
-      setApprovedApplications(data.applications)
-    }
+    load()
+  }, [installerId, packageId])
 
-    fetchInstaller()
-    fetchApproved()
-  }, [id, pkgId])
+  async function handleCreateBid() {
+    if (!selectedApplication) return
 
-  const handleCreateBid = () => {
-    if (!selectedApplication) {
-      alert("Please select an application first")
-      return
-    }
-    setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false)
+    setSubmitting(true)
+    try {
+      const res = await fetch("/api/bids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: selectedApplication,
+          durationHours: Number(bidDuration) * 24,
+          requirements,
+          bidType: "specific",
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Unable to create bid")
+      }
+
       setOpenBidDialog(false)
-      alert("Bid request sent to installer successfully!")
       router.push("/customer/bids")
-    }, 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create bid")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  if (error) {
+  if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-64 gap-4">
-          <p className="text-destructive font-medium">{error}</p>
+        <div className="h-64 flex items-center justify-center text-muted-foreground">
+          Loading package details…
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error || !installer || !pkg) {
+    return (
+      <DashboardLayout>
+        <div className="h-64 flex flex-col items-center justify-center gap-4">
+          <p className="text-destructive">{error ?? "Package unavailable"}</p>
           <Link href="/customer/installers">
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button className="bg-emerald-600 text-white">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Installers
             </Button>
@@ -112,331 +177,150 @@ export default function PackageDetailPage() {
     )
   }
 
-  if (!installer || !pkg) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading package details...</p>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
-  const hasApproved = approvedApplications.length > 0
-
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Back Button */}
+        {/* Header */}
         <div className="flex items-center gap-4">
           <Link href={`/customer/installers/${installer.id}/packages`}>
-            <Button variant="ghost" size="icon" className="bg-transparent">
+            <Button variant="ghost" size="icon">
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">{pkg.name}</h1>
+            <h1 className="text-2xl font-bold">{pkg.name}</h1>
             <p className="text-muted-foreground">by {installer.companyName}</p>
           </div>
         </div>
 
-        {!hasApproved && (
-          <Card className="border-amber-500/40 bg-amber-500/10">
-            <CardContent className="p-4 flex items-start gap-3">
-              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
-              <div>
-                <p className="font-semibold text-foreground">Approval required</p>
-                <p className="text-sm text-muted-foreground">
-                  You need an approved application before opening a bid or requesting a quote on this package.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Link href="/customer/applications/new">
-                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                      Submit application
-                    </Button>
-                  </Link>
-                  <Link href="/customer/applications">
-                    <Button size="sm" variant="outline" className="bg-transparent">
-                      Track applications
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Installer Info Card */}
+        {/* Installer */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Building className="w-8 h-8 text-emerald-500" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-foreground">{installer.companyName}</h3>
-                    <Badge className="bg-emerald-500/10 text-emerald-600" variant="secondary">
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Verified
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {installer.address}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {installer.phone}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" />
-                      {installer.email}
-                    </span>
-                  </div>
-                </div>
+          <CardContent className="p-6 flex justify-between flex-wrap gap-4">
+            <div className="flex gap-4">
+              <div className="w-16 h-16 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <Building className="w-8 h-8 text-emerald-500" />
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                    <span className="font-semibold text-foreground">{installer.rating}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Rating</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">{installer.companyName}</h3>
+                  <Badge className="bg-emerald-500/10 text-emerald-600">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Verified
+                  </Badge>
                 </div>
-                <div className="text-center">
-                  <p className="font-semibold text-foreground">{installer.completedInstallations}</p>
-                  <p className="text-xs text-muted-foreground">Installations</p>
-                </div>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {installer.address}
+                </p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Phone className="w-3 h-3" />
+                  {installer.phone}
+                </p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Mail className="w-3 h-3" />
+                  {installer.email}
+                </p>
               </div>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center gap-1 justify-center">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="font-semibold">{installer.rating}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Rating</p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Package Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Main Package Info */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-foreground flex items-center gap-2">
-                      <Package className="w-5 h-5 text-emerald-500" />
-                      Package Details
-                    </CardTitle>
-                    <CardDescription>Technical specifications and features</CardDescription>
-                  </div>
-                  <Badge className="bg-emerald-500/10 text-emerald-600 text-lg px-3 py-1">{pkg.capacity}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Technical Specs */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sun className="w-4 h-4 text-amber-500" />
-                      <span className="text-sm font-medium text-foreground">Solar Panels</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {pkg.panelCount} x {pkg.panelType}
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Zap className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm font-medium text-foreground">Inverter</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{pkg.inverterBrand}</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm font-medium text-foreground">Warranty</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{pkg.warranty}</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="w-4 h-4 text-purple-500" />
-                      <span className="text-sm font-medium text-foreground">Installation Time</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">2-3 days</p>
-                  </div>
-                </div>
+        {/* Package */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Package Overview</CardTitle>
+            <CardDescription>Installation details and pricing</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <Sun className="w-4 h-4 mb-1" />
+              <p className="text-xl font-bold">{pkg.capacity}</p>
+              <p className="text-sm text-muted-foreground">Capacity</p>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <Zap className="w-4 h-4 mb-1" />
+              <p className="text-xl font-bold">{pkg.panelCount}</p>
+              <p className="text-sm text-muted-foreground">Panels</p>
+            </div>
+            <div className="p-4 rounded-lg bg-muted/50">
+              <Shield className="w-4 h-4 mb-1" />
+              <p className="text-xl font-bold">{pkg.warranty}</p>
+              <p className="text-sm text-muted-foreground">Warranty</p>
+            </div>
+          </CardContent>
+        </Card>
 
-                {/* Features */}
-                <div>
-                  <h4 className="font-medium text-foreground mb-3">Included Features</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {pkg.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <span className="text-muted-foreground">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+        {/* Bid Dialog */}
+        <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
+          <DialogTrigger asChild>
+            <Button className="bg-emerald-500 text-white">
+              <Gavel className="w-4 h-4 mr-2" />
+              Request Bid
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request Bid</DialogTitle>
+              <DialogDescription>
+                Request a quote from {installer.companyName}
+              </DialogDescription>
+            </DialogHeader>
 
-                {/* Description */}
-                <div>
-                  <h4 className="font-medium text-foreground mb-2">Description</h4>
-                  <p className="text-sm text-muted-foreground">
-                    This {pkg.capacity} solar package is ideal for medium-sized households or small businesses. It
-                    includes high-efficiency {pkg.panelType} panels and a reliable {pkg.inverterBrand} inverter. The
-                    system comes with a comprehensive {pkg.warranty} warranty covering both panels and inverter.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            <div className="space-y-4">
+              <Label>Application</Label>
+              <Select
+                value={selectedApplication}
+                onValueChange={setSelectedApplication}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select application" />
+                </SelectTrigger>
+                <SelectContent>
+                  {applications.map((app) => (
+                    <SelectItem key={app.id} value={app.id}>
+                      {app.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-          {/* Price & Action Sidebar */}
-          <div className="space-y-6">
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle className="text-foreground">Package Price</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="text-center py-4 rounded-lg bg-emerald-500/10">
-                  <p className="text-3xl font-bold text-emerald-600">Rs. {pkg.price.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Including installation</p>
-                </div>
+              <Label>Bid Duration (days)</Label>
+              <Select value={bidDuration} onValueChange={setBidDuration}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 days</SelectItem>
+                  <SelectItem value="5">5 days</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="10">10 days</SelectItem>
+                </SelectContent>
+              </Select>
 
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Equipment</span>
-                    <span className="text-foreground">Rs. {Math.round(pkg.price * 0.7).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Installation</span>
-                    <span className="text-foreground">Rs. {Math.round(pkg.price * 0.2).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Permits & Documentation</span>
-                    <span className="text-foreground">Rs. {Math.round(pkg.price * 0.1).toLocaleString()}</span>
-                  </div>
-                  <hr className="border-border" />
-                  <div className="flex justify-between font-medium">
-                    <span className="text-foreground">Total</span>
-                    <span className="text-emerald-600">Rs. {pkg.price.toLocaleString()}</span>
-                  </div>
-                </div>
+              <Label>Requirements</Label>
+              <Textarea
+                value={requirements}
+                onChange={(e) => setRequirements(e.target.value)}
+                placeholder="Any special requirements"
+              />
 
-                {/* Open Bid Dialog */}
-                <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
-                  <DialogTrigger asChild>
-                    <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={!hasApproved}
-                      title={hasApproved ? undefined : "Application approval required before requesting a quote"}
-                    >
-                      <Gavel className="w-4 h-4 mr-2" />
-                      Request Quote / Open Bid
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Open New Bid</DialogTitle>
-                      <DialogDescription>
-                        Request a quote from {installer.companyName} for this package
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      {/* Selected Package Summary */}
-                      <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                        <p className="text-sm font-medium text-foreground">{pkg.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {pkg.capacity} - Rs. {pkg.price.toLocaleString()}
-                        </p>
-                      </div>
-
-                      {/* Select Application */}
-                      <div className="space-y-2">
-                        <Label>Select Approved Application</Label>
-                        <Select
-                          value={selectedApplication}
-                          onValueChange={setSelectedApplication}
-                          disabled={!approvedApplications.length}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose an application" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {approvedApplications.map((app) => (
-                              <SelectItem key={app.id} value={app.id}>
-                                {app.id} - {app.technicalDetails.roofType} ({app.technicalDetails.monthlyConsumption})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {approvedApplications.length === 0 && (
-                          <p className="text-xs text-red-500">
-                            You need an approved application to open a bid.{" "}
-                            <Link href="/customer/applications/new" className="underline">
-                              Apply now
-                            </Link>
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Bid Duration */}
-                      <div className="space-y-2">
-                        <Label>Bid Duration</Label>
-                        <Select value={bidDuration} onValueChange={setBidDuration}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="3">3 Days</SelectItem>
-                            <SelectItem value="5">5 Days</SelectItem>
-                            <SelectItem value="7">7 Days (Recommended)</SelectItem>
-                            <SelectItem value="14">14 Days</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Special Requirements */}
-                      <div className="space-y-2">
-                        <Label>Special Requirements (Optional)</Label>
-                        <Textarea
-                          placeholder="Any specific requirements or questions..."
-                          value={requirements}
-                          onChange={(e) => setRequirements(e.target.value)}
-                          className="h-20"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        className="flex-1 bg-transparent"
-                        onClick={() => setOpenBidDialog(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        onClick={handleCreateBid}
-                        disabled={!selectedApplication || loading || !approvedApplications.length}
-                      >
-                        {loading ? "Creating..." : "Create Bid"}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                <p className="text-xs text-center text-muted-foreground">
-                  Opening a bid allows the installer to send you a customized quote
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              <Button
+                onClick={handleCreateBid}
+                disabled={!selectedApplication || submitting}
+                className="bg-emerald-500 text-white"
+              >
+                {submitting ? "Sending…" : "Send Bid Request"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )
