@@ -1,39 +1,32 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer } from "lucide-react"
-
-// Demo bid sessions
-const demoBidSessions = [
-  {
-    id: "BID-001",
-    applicationId: "APP-001",
-    startedAt: "2024-01-20T10:00:00Z",
-    expiresAt: "2024-01-22T10:00:00Z",
-    status: "open" as const,
-    bidsCount: 3,
-  },
-  {
-    id: "BID-002",
-    applicationId: "APP-002",
-    startedAt: "2024-01-15T08:00:00Z",
-    expiresAt: "2024-01-17T08:00:00Z",
-    status: "closed" as const,
-    bidsCount: 5,
-    selectedBid: {
-      installerName: "Solar Pro Ltd",
-      price: 420000,
-    },
-  },
-]
+import { fetchBidSessions, type BidSession } from "@/lib/auth"
 
 export default function CustomerBids() {
-  const [bidSessions] = useState(demoBidSessions)
+  const [bidSessions, setBidSessions] = useState<BidSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const sessions = await fetchBidSessions()
+        setBidSessions(sessions)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load bids")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -79,6 +72,7 @@ export default function CustomerBids() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -117,7 +111,9 @@ export default function CustomerBids() {
             <CardDescription>View and manage your active and past bid sessions</CardDescription>
           </CardHeader>
           <CardContent>
-            {bidSessions.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading bid sessions...</div>
+            ) : bidSessions.length === 0 ? (
               <div className="text-center py-12">
                 <Gavel className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No bid sessions yet</h3>
@@ -146,16 +142,10 @@ export default function CustomerBids() {
                           {getStatusBadge(session.status)}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Application: {session.applicationId} • {session.bidsCount} bids received
+                          Application: {session.applicationId} • {session.bids.length} bids received
                         </p>
                         {session.status === "open" && (
                           <p className="text-xs text-amber-500 mt-1">{getTimeRemaining(session.expiresAt)}</p>
-                        )}
-                        {session.selectedBid && (
-                          <p className="text-xs text-emerald-500 mt-1">
-                            Selected: {session.selectedBid.installerName} - Rs.{" "}
-                            {session.selectedBid.price.toLocaleString()}
-                          </p>
                         )}
                       </div>
                     </div>

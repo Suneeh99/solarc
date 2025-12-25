@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Sun, Eye, EyeOff } from "lucide-react"
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { loginAction } from "@/app/actions/auth"
+import type { User } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,33 +21,28 @@ export default function LoginPage() {
     password: "",
   })
   const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [loading, startTransition] = useTransition()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    setLoading(true)
 
-    // Simulate authentication - in production, this would call an API
-    setTimeout(() => {
-      // Demo accounts for testing
-      if (formData.email === "customer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "customer", email: formData.email, name: "John Customer" }))
-        router.push("/customer/dashboard")
-      } else if (formData.email === "installer@demo.com") {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ role: "installer", email: formData.email, name: "Solar Pro Ltd", verified: true }),
-        )
-        router.push("/installer/dashboard")
-      } else if (formData.email === "officer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "officer", email: formData.email, name: "CEB Officer" }))
-        router.push("/officer/dashboard")
-      } else {
-        setError("Invalid credentials. Try: customer@demo.com, installer@demo.com, or officer@demo.com")
+    startTransition(async () => {
+      const result = await loginAction(formData)
+      if (!result.success || !result.user) {
+        setError(result.error || "Unable to sign in. Please try again.")
+        return
       }
-      setLoading(false)
-    }, 1000)
+
+      const user = result.user as User
+      if (user.role === "customer") {
+        router.push("/customer/dashboard")
+      } else if (user.role === "installer") {
+        router.push("/installer/dashboard")
+      } else {
+        router.push("/officer/dashboard")
+      }
+    })
   }
 
   return (
@@ -118,11 +115,11 @@ export default function LoginPage() {
               <div className="mt-6 p-4 rounded-lg bg-muted/50 text-sm">
                 <p className="font-medium mb-2 text-foreground">Demo Accounts:</p>
                 <ul className="space-y-1 text-muted-foreground">
-                  <li>Customer: customer@demo.com</li>
-                  <li>Installer: installer@demo.com</li>
-                  <li>Officer: officer@demo.com</li>
+                  <li>Customer: customer@demo.com (password123)</li>
+                  <li>Installer: installer@demo.com (password123)</li>
+                  <li>Officer: officer@demo.com (password123)</li>
                 </ul>
-                <p className="mt-2 text-xs">(Any password works for demo)</p>
+                <p className="mt-2 text-xs">Passwords must match the seeded accounts.</p>
               </div>
             </form>
           </CardContent>

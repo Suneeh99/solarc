@@ -2,49 +2,91 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Building, Calendar, Receipt, Clock, ArrowRight, Users, TrendingUp, Zap } from "lucide-react"
-import { getUser } from "@/lib/auth"
+import {
+  fetchApplications,
+  fetchCurrentUser,
+  fetchInstallers,
+  fetchPayments,
+  fetchUsers,
+  type Application,
+  type Installer,
+  type Invoice,
+  type User,
+} from "@/lib/auth"
 
 export default function OfficerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [installers, setInstallers] = useState<Installer[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setUser(getUser())
+    async function load() {
+      const currentUser = await fetchCurrentUser()
+      setUser(currentUser)
+      const [apps, installersData, payments, userList] = await Promise.all([
+        fetchApplications(),
+        fetchInstallers(false),
+        fetchPayments(),
+        fetchUsers(),
+      ])
+      setApplications(apps)
+      setInstallers(installersData)
+      setInvoices(payments.invoices)
+      setUsers(userList)
+      setLoading(false)
+    }
+    load()
   }, [])
 
-  // Demo stats
-  const stats = {
-    pendingApplications: 12,
-    pendingInstallerVerifications: 3,
-    scheduledSiteVisits: 5,
-    pendingPayments: 8,
-    activeInstallations: 15,
-    totalCustomers: 156,
-    totalInstallers: 24,
-    totalCapacityMW: 2.4,
+  const stats = useMemo(() => {
+    const pendingApplications = applications.filter((app) => app.status === "pending").length
+    const pendingInstallerVerifications = installers.filter((inst) => !inst.verified).length
+    const scheduledSiteVisits = applications.filter((app) => app.siteVisitDate).length
+    const pendingPayments = invoices.filter((inv) => inv.status === "pending").length
+    const activeInstallations = applications.filter((app) =>
+      ["installation_in_progress", "installation_complete", "final_inspection"].includes(app.status),
+    ).length
+    const totalCustomers = users.filter((u) => u.role === "customer").length
+    const totalInstallers = installers.filter((inst) => inst.verified).length
+    const totalCapacityMW =
+      applications.reduce((sum, app) => {
+        const capacity = parseFloat((app.selectedInstaller?.packageName || "").replace(/\D+/g, ""))
+        return sum + (Number.isNaN(capacity) ? 0 : capacity / 1000)
+      }, 0) || applications.length * 0.003
+
+    return {
+      pendingApplications,
+      pendingInstallerVerifications,
+      scheduledSiteVisits,
+      pendingPayments,
+      activeInstallations,
+      totalCustomers,
+      totalInstallers,
+      totalCapacityMW: Number(totalCapacityMW.toFixed(2)),
+    }
+  }, [applications, installers, invoices, users])
+
+  const recentApplications = applications.slice(0, 3)
+  const pendingVerifications = installers.filter((inst) => !inst.verified).slice(0, 3)
+  const upcomingSiteVisits = applications.filter((app) => app.siteVisitDate).slice(0, 3)
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading dashboard...</div>
+      </DashboardLayout>
+    )
   }
-
-  const recentApplications = [
-    { id: "APP-015", customerName: "David Wilson", status: "pending", createdAt: "2024-01-20" },
-    { id: "APP-014", customerName: "Emily Chen", status: "under_review", createdAt: "2024-01-19" },
-    { id: "APP-013", customerName: "Michael Brown", status: "site_visit_scheduled", createdAt: "2024-01-18" },
-  ]
-
-  const pendingVerifications = [
-    { id: "INS-003", companyName: "SunPower Systems", submittedAt: "2024-01-19" },
-    { id: "INS-004", companyName: "Green Solar Co", submittedAt: "2024-01-18" },
-  ]
-
-  const upcomingSiteVisits = [
-    { id: "SV-001", customerName: "John Customer", location: "Colombo 07", date: "2024-01-22", time: "10:00 AM" },
-    { id: "SV-002", customerName: "Lisa Green", location: "Kandy", date: "2024-01-23", time: "2:00 PM" },
-  ]
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { label: string; color: string; icon: React.ElementType }> = {
