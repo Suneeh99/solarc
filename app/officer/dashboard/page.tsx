@@ -114,10 +114,7 @@ export default function OfficerDashboard() {
   }
 
   const getStatusBadge = (status: string) => {
-    const map: Record<
-      string,
-      { label: string; className: string }
-    > = {
+    const map: Record<string, { label: string; className: string }> = {
       pending: {
         label: "Pending",
         className: "bg-amber-500/10 text-amber-600",
@@ -133,6 +130,7 @@ export default function OfficerDashboard() {
     }
 
     const cfg = map[status] ?? map.pending
+
     return (
       <Badge variant="secondary" className={cfg.className}>
         <Clock className="w-3 h-3 mr-1" />

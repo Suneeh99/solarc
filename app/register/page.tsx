@@ -1,11 +1,11 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, Suspense, useTransition } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Sun, Eye, EyeOff, Upload, Building, User } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Sun, Eye, EyeOff, Building, User } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,18 +18,19 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+
 import { registerAction } from "@/app/actions/auth"
 import type { User as SessionUser } from "@/lib/auth"
 
 function RegisterForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const defaultRole = searchParams.get("role") || "customer"
 
-  const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState(defaultRole)
-  const [loading, startTransition] = useTransition()
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
+  const [loading, startTransition] = useTransition()
 
   const [customerData, setCustomerData] = useState({
     name: "",
@@ -67,11 +68,11 @@ function RegisterForm() {
     startTransition(async () => {
       const result = await registerAction({
         role: "customer",
-        email: customerData.email,
-        password: customerData.password,
         name: customerData.name,
+        email: customerData.email,
         phone: customerData.phone,
         address: customerData.address,
+        password: customerData.password,
       })
 
       if (!result.success || !result.user) {
@@ -80,9 +81,7 @@ function RegisterForm() {
       }
 
       const user = result.user as SessionUser
-      if (user.role === "customer") {
-        router.push("/customer/dashboard")
-      }
+      router.push("/customer/dashboard")
     })
   }
 
@@ -98,14 +97,14 @@ function RegisterForm() {
     startTransition(async () => {
       const result = await registerAction({
         role: "installer",
-        email: installerData.email,
-        password: installerData.password,
         name: installerData.companyName,
-        phone: installerData.phone,
-        address: installerData.address,
         companyName: installerData.companyName,
         registrationNumber: installerData.registrationNumber,
         description: installerData.description,
+        email: installerData.email,
+        phone: installerData.phone,
+        address: installerData.address,
+        password: installerData.password,
       })
 
       if (!result.success || !result.user) {
@@ -113,20 +112,14 @@ function RegisterForm() {
         return
       }
 
-      const user = result.user as SessionUser
-      if (user.role === "installer") {
-        router.push("/installer/dashboard")
-      }
+      router.push("/installer/dashboard")
     })
   }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 py-8">
       <div className="w-full max-w-lg">
-        <Link
-          href="/"
-          className="flex items-center justify-center gap-2 mb-8"
-        >
+        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
           <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center">
             <Sun className="w-6 h-6 text-white" />
           </div>
@@ -135,15 +128,14 @@ function RegisterForm() {
           </span>
         </Link>
 
-        <Card className="border-border">
+        <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-foreground">
-              Create Account
-            </CardTitle>
+            <CardTitle className="text-2xl">Create Account</CardTitle>
             <CardDescription>
               Register to start your solar journey
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -163,98 +155,61 @@ function RegisterForm() {
                 </div>
               )}
 
+              {/* Customer */}
               <TabsContent value="customer">
-                <form
-                  onSubmit={handleCustomerSubmit}
-                  className="space-y-4"
-                >
-                  <div className="space-y-2">
-                    <Label>Full Name</Label>
+                <form onSubmit={handleCustomerSubmit} className="space-y-4">
+                  <Field label="Full Name">
                     <Input
                       value={customerData.name}
                       onChange={(e) =>
-                        setCustomerData({
-                          ...customerData,
-                          name: e.target.value,
-                        })
+                        setCustomerData({ ...customerData, name: e.target.value })
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Email</Label>
+                  <Field label="Email">
                     <Input
                       type="email"
                       value={customerData.email}
                       onChange={(e) =>
-                        setCustomerData({
-                          ...customerData,
-                          email: e.target.value,
-                        })
+                        setCustomerData({ ...customerData, email: e.target.value })
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
+                  <Field label="Phone">
                     <Input
                       value={customerData.phone}
                       onChange={(e) =>
-                        setCustomerData({
-                          ...customerData,
-                          phone: e.target.value,
-                        })
+                        setCustomerData({ ...customerData, phone: e.target.value })
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Address</Label>
+                  <Field label="Address">
                     <Textarea
                       value={customerData.address}
                       onChange={(e) =>
-                        setCustomerData({
-                          ...customerData,
-                          address: e.target.value,
-                        })
+                        setCustomerData({ ...customerData, address: e.target.value })
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        value={customerData.password}
-                        onChange={(e) =>
-                          setCustomerData({
-                            ...customerData,
-                            password: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                  <PasswordField
+                    label="Password"
+                    value={customerData.password}
+                    onChange={(v) =>
+                      setCustomerData({ ...customerData, password: v })
+                    }
+                    show={showPassword}
+                    toggle={() => setShowPassword((p) => !p)}
+                  />
 
-                  <div className="space-y-2">
-                    <Label>Confirm Password</Label>
+                  <Field label="Confirm Password">
                     <Input
                       type="password"
                       value={customerData.confirmPassword}
@@ -266,27 +221,18 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <Button
-                    type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
-                  >
-                    {loading
-                      ? "Creating Account..."
-                      : "Create Customer Account"}
+                  <Button className="w-full bg-emerald-500 text-white" disabled={loading}>
+                    {loading ? "Creating Account..." : "Create Customer Account"}
                   </Button>
                 </form>
               </TabsContent>
 
+              {/* Installer */}
               <TabsContent value="installer">
-                <form
-                  onSubmit={handleInstallerSubmit}
-                  className="space-y-4"
-                >
-                  <div className="space-y-2">
-                    <Label>Company Name</Label>
+                <form onSubmit={handleInstallerSubmit} className="space-y-4">
+                  <Field label="Company Name">
                     <Input
                       value={installerData.companyName}
                       onChange={(e) =>
@@ -297,10 +243,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Registration Number</Label>
+                  <Field label="Registration Number">
                     <Input
                       value={installerData.registrationNumber}
                       onChange={(e) =>
@@ -311,10 +256,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Email</Label>
+                  <Field label="Email">
                     <Input
                       type="email"
                       value={installerData.email}
@@ -326,10 +270,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
+                  <Field label="Phone">
                     <Input
                       value={installerData.phone}
                       onChange={(e) =>
@@ -340,10 +283,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Address</Label>
+                  <Field label="Address">
                     <Textarea
                       value={installerData.address}
                       onChange={(e) =>
@@ -354,10 +296,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Description</Label>
+                  <Field label="Description">
                     <Textarea
                       value={installerData.description}
                       onChange={(e) =>
@@ -368,10 +309,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Password</Label>
+                  <Field label="Password">
                     <Input
                       type="password"
                       value={installerData.password}
@@ -383,10 +323,9 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label>Confirm Password</Label>
+                  <Field label="Confirm Password">
                     <Input
                       type="password"
                       value={installerData.confirmPassword}
@@ -398,21 +337,14 @@ function RegisterForm() {
                       }
                       required
                     />
-                  </div>
+                  </Field>
 
                   <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 text-sm">
-                    Your account will be reviewed by a CEB officer before
-                    activation.
+                    Your account will be reviewed by a CEB officer before activation.
                   </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                    disabled={loading}
-                  >
-                    {loading
-                      ? "Creating Account..."
-                      : "Create Installer Account"}
+                  <Button className="w-full bg-emerald-500 text-white" disabled={loading}>
+                    {loading ? "Creating Account..." : "Create Installer Account"}
                   </Button>
                 </form>
               </TabsContent>
@@ -434,11 +366,63 @@ function RegisterForm() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  show,
+  toggle,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  show: boolean
+  toggle: () => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="relative">
+        <Input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required
+        />
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
           Loading...
         </div>
       }

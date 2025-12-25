@@ -28,13 +28,16 @@ export async function GET() {
     user.role === "customer"
       ? { customerId: user.id }
       : user.role === "installer" && user.organization
-        ? { application: { installerOrganizationId: user.organization.id } }
-        : {}
+      ? { application: { installerOrganizationId: user.organization.id } }
+      : {}
 
   const [invoices, meterReadings] = await Promise.all([
     prisma.invoice.findMany({
       where,
-      include: { application: { select: { reference: true, customerId: true } }, customer: { select: { name: true } } },
+      include: {
+        application: { select: { reference: true, customerId: true } },
+        customer: { select: { name: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.meterReading.findMany({
@@ -42,7 +45,9 @@ export async function GET() {
     }),
   ])
 
-  const invoiceList = invoices.filter((inv) => inv.type !== "monthly_bill").map(mapInvoice)
+  const invoiceList = invoices
+    .filter((inv) => inv.type !== "monthly_bill")
+    .map(mapInvoice)
 
   const monthlyBills = invoices
     .filter((inv) => inv.type === "monthly_bill")
@@ -51,7 +56,7 @@ export async function GET() {
         (r) =>
           r.applicationId === inv.applicationId &&
           r.year === inv.dueDate.getFullYear() &&
-          r.month === inv.dueDate.getMonth() + 1,
+          r.month === inv.dueDate.getMonth() + 1
       )
 
       return {
@@ -79,14 +84,22 @@ export async function POST(request: Request) {
   }
 
   if (user.role === "installer") {
-    return NextResponse.json({ error: "Installers cannot create invoices" }, { status: 403 })
+    return NextResponse.json(
+      { error: "Installers cannot create invoices" },
+      { status: 403 }
+    )
   }
 
   const body = await request.json()
-  const application = await prisma.application.findFirst({ where: { reference: body.applicationId } })
+  const application = await prisma.application.findFirst({
+    where: { reference: body.applicationId },
+  })
 
   if (!application) {
-    return NextResponse.json({ error: "Application not found" }, { status: 404 })
+    return NextResponse.json(
+      { error: "Application not found" },
+      { status: 404 }
+    )
   }
 
   const invoice = await prisma.invoice.create({
@@ -99,8 +112,14 @@ export async function POST(request: Request) {
       status: body.status || "pending",
       type: body.type || "authority_fee",
     },
-    include: { application: { select: { reference: true, customerId: true } } },
+    include: {
+      application: { select: { reference: true, customerId: true } },
+      customer: { select: { name: true } },
+    },
   })
 
-  return NextResponse.json({ invoice: mapInvoice(invoice) }, { status: 201 })
+  return NextResponse.json(
+    { invoice: mapInvoice(invoice) },
+    { status: 201 }
+  )
 }

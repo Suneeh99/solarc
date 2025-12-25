@@ -1,16 +1,56 @@
 import { NextResponse } from "next/server"
-import { loginUser } from "@/lib/services/auth"
+import { prisma } from "@/lib/prisma"
+import { createSession, verifyPassword } from "@/lib/auth-server"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const user = await loginUser(body)
+    const { email, password } = body
 
-    return NextResponse.json({ user })
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Missing credentials" },
+        { status: 400 },
+      )
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 },
+      )
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash)
+    if (!valid) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 },
+      )
+    }
+
+    await createSession(user.id, user.role)
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        verified: user.verified,
+        organizationId: user.organizationId,
+      },
+    })
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unable to login"
+    console.error("Login error:", error)
 
-    return NextResponse.json({ error: message }, { status: 401 })
+    return NextResponse.json(
+      { error: "Login failed" },
+      { status: 500 },
+    )
   }
 }

@@ -4,6 +4,10 @@ const bcrypt = require("bcryptjs")
 const prisma = new PrismaClient()
 
 async function main() {
+  /* --------------------------------------------------------------- */
+  /* Reset database                                                   */
+  /* --------------------------------------------------------------- */
+
   await prisma.notification.deleteMany()
   await prisma.meterReading.deleteMany()
   await prisma.invoice.deleteMany()
@@ -15,11 +19,17 @@ async function main() {
   await prisma.user.deleteMany()
   await prisma.organization.deleteMany()
 
-  const officerPassword = await bcrypt.hash("password123", 10)
-  const customerPassword = await bcrypt.hash("password123", 10)
-  const installerPassword = await bcrypt.hash("password123", 10)
+  /* --------------------------------------------------------------- */
+  /* Passwords                                                        */
+  /* --------------------------------------------------------------- */
 
-  const officerOrg = await prisma.organization.create({
+  const password = await bcrypt.hash("password123", 10)
+
+  /* --------------------------------------------------------------- */
+  /* Organizations                                                    */
+  /* --------------------------------------------------------------- */
+
+  const ceb = await prisma.organization.create({
     data: {
       name: "CEB",
       verified: true,
@@ -34,7 +44,7 @@ async function main() {
       address: "123 Solar Street, Colombo",
       phone: "+94 11 234 5678",
       verified: true,
-      verifiedAt: new Date("2024-01-10T00:00:00Z"),
+      verifiedAt: new Date("2024-01-10"),
       rating: 4.8,
       completedInstallations: 150,
       documents: ["cert.pdf", "license.pdf"],
@@ -49,20 +59,24 @@ async function main() {
       address: "456 Energy Lane, Kandy",
       phone: "+94 11 345 6789",
       verified: true,
-      verifiedAt: new Date("2024-01-12T00:00:00Z"),
+      verifiedAt: new Date("2024-01-12"),
       rating: 4.6,
       completedInstallations: 95,
       documents: ["cert.pdf"],
     },
   })
 
+  /* --------------------------------------------------------------- */
+  /* Users                                                            */
+  /* --------------------------------------------------------------- */
+
   const officer = await prisma.user.create({
     data: {
       email: "officer@demo.com",
       name: "CEB Officer",
       role: "officer",
-      passwordHash: officerPassword,
-      organizationId: officerOrg.id,
+      passwordHash: password,
+      organizationId: ceb.id,
       verified: true,
     },
   })
@@ -72,7 +86,7 @@ async function main() {
       email: "customer@demo.com",
       name: "John Customer",
       role: "customer",
-      passwordHash: customerPassword,
+      passwordHash: password,
       phone: "+94 71 123 4567",
       address: "25 Main Street, Colombo",
       verified: true,
@@ -84,7 +98,7 @@ async function main() {
       email: "installer@demo.com",
       name: "Solar Pro Admin",
       role: "installer",
-      passwordHash: installerPassword,
+      passwordHash: password,
       phone: "+94 11 222 3333",
       address: "123 Solar Street, Colombo",
       organizationId: solarPro.id,
@@ -92,7 +106,11 @@ async function main() {
     },
   })
 
-  const packageBasic = await prisma.installerPackage.create({
+  /* --------------------------------------------------------------- */
+  /* Installer packages                                               */
+  /* --------------------------------------------------------------- */
+
+  const basicPackage = await prisma.installerPackage.create({
     data: {
       organizationId: solarPro.id,
       name: "Basic Solar Package",
@@ -102,11 +120,15 @@ async function main() {
       inverterBrand: "Huawei",
       warranty: "10 years",
       price: 450000,
-      features: ["Free installation", "1 year maintenance", "Net metering setup"],
+      features: [
+        "Free installation",
+        "1 year maintenance",
+        "Net metering setup",
+      ],
     },
   })
 
-  const packagePremium = await prisma.installerPackage.create({
+  const premiumPackage = await prisma.installerPackage.create({
     data: {
       organizationId: solarPro.id,
       name: "Premium Solar Package",
@@ -116,7 +138,11 @@ async function main() {
       inverterBrand: "SMA",
       warranty: "15 years",
       price: 750000,
-      features: ["Free installation", "2 years maintenance", "Net metering setup", "Monitoring system"],
+      features: [
+        "Free installation",
+        "2 years maintenance",
+        "Monitoring system",
+      ],
     },
   })
 
@@ -134,13 +160,18 @@ async function main() {
     },
   })
 
+  /* --------------------------------------------------------------- */
+  /* Application                                                      */
+  /* --------------------------------------------------------------- */
+
   const application = await prisma.application.create({
     data: {
       reference: "APP-001",
       customerId: customer.id,
       installerOrganizationId: solarPro.id,
-      selectedPackageId: packageBasic.id,
+      selectedPackageId: basicPackage.id,
       status: "approved",
+      siteVisitDate: new Date("2024-01-20"),
       documents: {
         nic: "nic.pdf",
         bankDetails: "bank.pdf",
@@ -152,15 +183,17 @@ async function main() {
         monthlyConsumption: "350 kWh",
         connectionPhase: "Single Phase",
       },
-      siteVisitDate: new Date("2024-01-20T00:00:00Z"),
     },
   })
+
+  /* --------------------------------------------------------------- */
+  /* Bid session + bid                                                 */
+  /* --------------------------------------------------------------- */
 
   const bidSession = await prisma.bidSession.create({
     data: {
       applicationId: application.id,
       customerId: customer.id,
-      status: "open",
       startedAt: new Date("2024-01-20T10:00:00Z"),
       expiresAt: new Date("2024-01-22T10:00:00Z"),
     },
@@ -172,7 +205,7 @@ async function main() {
       bidSessionId: bidSession.id,
       installerId: installer.id,
       organizationId: solarPro.id,
-      packageId: packagePremium.id,
+      packageId: premiumPackage.id,
       price: 420000,
       proposal: "Premium package with upgraded inverter and monitoring",
       warranty: "12 years",
@@ -181,13 +214,17 @@ async function main() {
     },
   })
 
+  /* --------------------------------------------------------------- */
+  /* Invoices                                                         */
+  /* --------------------------------------------------------------- */
+
   await prisma.invoice.create({
     data: {
       applicationId: application.id,
       customerId: customer.id,
       amount: 150000,
       description: "Authority connection fee",
-      dueDate: new Date("2024-02-01T00:00:00Z"),
+      dueDate: new Date("2024-02-01"),
       status: "pending",
       type: "authority_fee",
     },
@@ -199,12 +236,16 @@ async function main() {
       customerId: customer.id,
       amount: 18500,
       description: "January solar bill",
-      dueDate: new Date("2024-02-15T00:00:00Z"),
+      dueDate: new Date("2024-02-15"),
       status: "paid",
       type: "monthly_bill",
-      paidAt: new Date("2024-02-10T00:00:00Z"),
+      paidAt: new Date("2024-02-10"),
     },
   })
+
+  /* --------------------------------------------------------------- */
+  /* Meter reading                                                    */
+  /* --------------------------------------------------------------- */
 
   await prisma.meterReading.create({
     data: {
@@ -217,6 +258,10 @@ async function main() {
       kwhImported: 200,
     },
   })
+
+  /* --------------------------------------------------------------- */
+  /* Notifications                                                    */
+  /* --------------------------------------------------------------- */
 
   await prisma.notification.createMany({
     data: [
@@ -233,7 +278,7 @@ async function main() {
     ],
   })
 
-  console.log("Database seeded with demo data")
+  console.log("✅ Database seeded with demo data")
 }
 
 main()

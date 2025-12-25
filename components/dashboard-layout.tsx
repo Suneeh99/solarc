@@ -1,10 +1,10 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+
 import {
   Sun,
   LayoutDashboard,
@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Calendar,
 } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -32,6 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
 import { fetchCurrentUser, logout, type User, type UserRole } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import {
@@ -76,6 +78,7 @@ const navigationByRole: Record<UserRole, NavItem[]> = {
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -108,12 +111,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   if (loading || !user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">
+          Loading...
+        </div>
       </div>
     )
   }
 
   const navigation = navigationByRole[user.role]
+
   const roleColors: Record<UserRole, string> = {
     customer: "bg-emerald-500",
     installer: "bg-amber-500",
@@ -132,8 +138,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         <aside
           className={cn(
-            "fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border transform transition-transform duration-200 lg:translate-x-0",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            "fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border transition-transform lg:translate-x-0",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <div className="flex flex-col h-full">
@@ -142,17 +148,16 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 <div
                   className={cn(
                     "w-8 h-8 rounded-lg flex items-center justify-center",
-                    roleColors[user.role]
+                    roleColors[user.role],
                   )}
                 >
                   <Sun className="w-5 h-5 text-white" />
                 </div>
-                <span className="font-semibold text-foreground">
-                  CEB Solar
-                </span>
+                <span className="font-semibold">CEB Solar</span>
               </Link>
+
               <button
-                className="lg:hidden text-muted-foreground hover:text-foreground"
+                className="lg:hidden text-muted-foreground"
                 onClick={() => setSidebarOpen(false)}
               >
                 <X className="w-5 h-5" />
@@ -166,13 +171,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={() => setSidebarOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium",
                       isActive
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
-                    onClick={() => setSidebarOpen(false)}
                   >
                     <item.icon className="w-5 h-5" />
                     {item.label}
@@ -190,8 +195,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                     {user.name.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
+
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
                     {user.name}
                   </p>
                   <p className="text-xs text-muted-foreground capitalize">
@@ -207,7 +213,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-30 bg-background border-b border-border">
             <div className="flex items-center justify-between px-4 py-3">
               <button
-                className="lg:hidden text-muted-foreground hover:text-foreground"
+                className="lg:hidden text-muted-foreground"
                 onClick={() => setSidebarOpen(true)}
               >
                 <Menu className="w-6 h-6" />
@@ -218,15 +224,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="flex items-center gap-2"
-                    >
+                    <Button variant="ghost" className="flex items-center gap-2">
                       <Avatar className="w-8 h-8">
                         <AvatarFallback
                           className={cn(
                             "text-white text-xs",
-                            roleColors[user.role]
+                            roleColors[user.role],
                           )}
                         >
                           {user.name.slice(0, 2).toUpperCase()}
@@ -237,21 +240,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       </span>
                     </Button>
                   </DropdownMenuTrigger>
+
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium text-foreground">
-                        {user.name}
-                      </p>
+                      <p className="text-sm font-medium">{user.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {user.email}
                       </p>
                     </div>
+
                     <DropdownMenuSeparator />
+
                     <DropdownMenuItem>
                       <Settings className="w-4 h-4 mr-2" />
                       Settings
                     </DropdownMenuItem>
+
                     <DropdownMenuSeparator />
+
                     <DropdownMenuItem
                       onClick={handleLogout}
                       className="text-destructive"

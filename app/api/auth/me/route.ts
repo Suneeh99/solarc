@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server"
-import { currentUser } from "@/lib/services/auth"
+import { getSessionUser } from "@/lib/auth-server"
 
 export async function GET() {
-  const user = await currentUser()
+  const user = await getSessionUser()
+
   if (!user) {
-    return NextResponse.json({ user: null }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  return NextResponse.json({ user })
+
+  return NextResponse.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    verified: user.verified,
+  })
 }

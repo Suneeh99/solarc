@@ -1,11 +1,11 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useTransition } from "react"
+import { useActionState, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Sun, Eye, EyeOff } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,42 +16,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+
 import { loginAction } from "@/app/actions/auth"
-import type { User } from "@/lib/auth"
 
 export default function LoginPage() {
-  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect = searchParams.get("redirect") || "/customer/dashboard"
+
+  const [state, formAction, pending] = useActionState(loginAction, null)
   const [showPassword, setShowPassword] = useState(false)
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
-  const [error, setError] = useState("")
-  const [loading, startTransition] = useTransition()
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-
-    startTransition(async () => {
-      const result = await loginAction(formData)
-
-      if (!result.success || !result.user) {
-        setError(result.error || "Unable to sign in. Please try again.")
-        return
-      }
-
-      const user = result.user as User
-
-      if (user.role === "customer") {
-        router.push("/customer/dashboard")
-      } else if (user.role === "installer") {
-        router.push("/installer/dashboard")
-      } else {
-        router.push("/officer/dashboard")
-      }
-    })
-  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -77,11 +50,14 @@ export default function LoginPage() {
               Sign in to your account to continue
             </CardDescription>
           </CardHeader>
+
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
+            <form action={formAction} className="space-y-4">
+              <input type="hidden" name="redirect" value={redirect} />
+
+              {state?.error && (
                 <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-                  {error}
+                  {state.error}
                 </div>
               )}
 
@@ -89,15 +65,9 @@ export default function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="Enter your email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      email: e.target.value,
-                    })
-                  }
                   required
                 />
               </div>
@@ -107,20 +77,14 @@ export default function LoginPage() {
                 <div className="relative">
                   <Input
                     id="password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        password: e.target.value,
-                      })
-                    }
                     required
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     {showPassword ? (
@@ -135,9 +99,9 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                disabled={loading}
+                disabled={pending}
               >
-                {loading ? "Signing in..." : "Sign In"}
+                {pending ? "Signing in..." : "Sign In"}
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">

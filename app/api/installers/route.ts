@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { currentUser } from "@/lib/services/auth"
 
 function mapInstaller(org: any) {
-  const primaryInstaller = org.users.find((user: any) => user.role === "installer")
+  const primaryInstaller = org.users.find(
+    (user: any) => user.role === "installer"
+  )
 
   return {
     id: org.id,
@@ -45,7 +47,9 @@ export async function GET(request: Request) {
     },
   })
 
-  return NextResponse.json({ installers: organizations.map(mapInstaller) })
+  return NextResponse.json({
+    installers: organizations.map(mapInstaller),
+  })
 }
 
 export async function POST(request: Request) {
@@ -55,7 +59,10 @@ export async function POST(request: Request) {
   }
 
   if (user.role !== "installer" || !user.organization) {
-    return NextResponse.json({ error: "Only installers can add packages" }, { status: 403 })
+    return NextResponse.json(
+      { error: "Only installers can add packages" },
+      { status: 403 }
+    )
   }
 
   const body = await request.json()
@@ -77,7 +84,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ package: pkg }, { status: 201 })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to add package"
+    const message =
+      error instanceof Error ? error.message : "Unable to add package"
+
     return NextResponse.json({ error: message }, { status: 400 })
   }
 }

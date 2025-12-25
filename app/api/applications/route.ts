@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
+import { Role } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { currentUser } from "@/lib/services/auth"
+import { getSessionUser, requireRole } from "@/lib/auth-server"
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
 
 function mapApplication(application: any) {
   return {
@@ -10,7 +15,7 @@ function mapApplication(application: any) {
     createdAt: application.createdAt,
     updatedAt: application.updatedAt,
     customerId: application.customerId,
-    customerName: application.customer.name,
+    customerName: application.customer?.name,
     documents: application.documents,
     technicalDetails: application.technicalDetails,
     siteVisitDate: application.siteVisitDate,
@@ -23,23 +28,42 @@ function mapApplication(application: any) {
           price: application.selectedPackage?.price,
         }
       : undefined,
-    bidId: application.bids[0]?.id,
+    bidId: application.bids?.[0]?.id,
     invoices: application.invoices,
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* GET /api/applications                                               */
+/* ------------------------------------------------------------------ */
+
 export async function GET() {
-  const user = await currentUser()
+  const user = await getSessionUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const where =
-    user.role === "customer"
-      ? { customerId: user.id }
-      : user.role === "installer" && user.organization
-      ? { installerOrganizationId: user.organization.id }
-      : {}
+  let where: Record<string, unknown> = {}
+
+  if (user.role === Role.customer) {
+    where.customerId = user.id
+  }
+
+  if (user.role === Role.installer && user.organizationId) {
+    where.installerOrganizationId = user.organizationId
+  }
+
+  if (user.role === Role.officer) {
+    // officers see everything
+    where = {}
+  }
+
+  const forbidden = requireRole(user.role, [
+    Role.customer,
+    Role.installer,
+    Role.officer,
+  ])
+  if (forbidden) return forbidden
 
   const applications = await prisma.application.findMany({
     where,
@@ -58,15 +82,28 @@ export async function GET() {
   })
 }
 
+/* ------------------------------------------------------------------ */
+/* POST /api/applications                                              */
+/* ------------------------------------------------------------------ */
+
 export async function POST(request: Request) {
-  const user = await currentUser()
+  const user = await getSessionUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  if (user.role !== Role.customer) {
+    return NextResponse.json(
+      { error: "Only customers can create applications" },
+      { status: 403 },
+    )
+  }
+
   const body = await request.json()
+
   const reference =
-    body.reference || `APP-${Math.floor(Math.random() * 900 + 100)}`
+    body.reference ||
+    `APP-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
 
   try {
     const application = await prisma.application.create({
@@ -90,7 +127,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { application: mapApplication(application) },
-      { status: 201 }
+      { status: 201 },
     )
   } catch (error) {
     const message =

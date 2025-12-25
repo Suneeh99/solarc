@@ -19,7 +19,11 @@ export interface User {
   } | null
 }
 
-export type InstallerStatus = "pending" | "verified" | "rejected" | "suspended"
+export type InstallerStatus =
+  | "pending"
+  | "verified"
+  | "rejected"
+  | "suspended"
 
 export interface DocumentMeta {
   fileName: string
@@ -279,106 +283,4 @@ export async function fetchUsers(): Promise<User[]> {
   const response = await fetch("/api/users", { cache: "no-store" })
   const data = await handleResponse<{ users: User[] }>(response)
   return data.users
-}
-
-export function getDemoInvoices(): Invoice[] {
-  return [
-    {
-      id: "INV-AUTH-001",
-      applicationId: "APP-001",
-      customerId: "CUST-001",
-      type: "authority_fee",
-      amount: 25000,
-      status: "pending",
-      createdAt: "2024-01-20",
-      dueDate: "2024-02-03",
-      description: "Authority fee invoice for grid connection approval",
-      paymentId: "PAY-AUTH-001",
-      pdfUrl: "/pdfs/invoice-auth-001.pdf",
-      channel: "email",
-      nextAction: "Awaiting receipt verification to unlock installation",
-    },
-    {
-      id: "INV-INST-002",
-      applicationId: "APP-002",
-      customerId: "CUST-002",
-      type: "installation",
-      amount: 850000,
-      status: "paid",
-      createdAt: "2024-01-15",
-      paidAt: "2024-01-18",
-      dueDate: "2024-01-22",
-      description: "Installation milestone invoice for premium package",
-      paymentId: "PAY-002",
-      pdfUrl: "/pdfs/invoice-installation-002.pdf",
-      channel: "email",
-    },
-    {
-      id: "INV-BILL-2024-01",
-      applicationId: "APP-001",
-      customerId: "CUST-001",
-      type: "monthly_bill",
-      amount: -3200,
-      status: "paid",
-      createdAt: "2024-02-01",
-      paidAt: "2024-02-05",
-      dueDate: "2024-02-10",
-      description: "Net metering statement - January 2024 (credit)",
-      meterReadingId: "MR-001",
-      pdfUrl: "/pdfs/bill-2024-01.pdf",
-      channel: "email",
-    },
-    {
-      id: "INV-BILL-2024-02",
-      applicationId: "APP-001",
-      customerId: "CUST-001",
-      type: "monthly_bill",
-      amount: 2100,
-      status: "pending",
-      createdAt: "2024-03-01",
-      dueDate: "2024-03-15",
-      description: "Net metering statement - February 2024",
-      meterReadingId: "MR-002",
-      pdfUrl: "/pdfs/bill-2024-02.pdf",
-      channel: "email",
-      nextAction: "Auto-reminder scheduled 3 days before due date",
-    },
-  ]
-}
-
-export function getDemoMonthlyBills(): MonthlyBill[] {
-  return [
-    {
-      id: "BILL-001",
-      customerId: "CUST-001",
-      applicationId: "APP-001",
-      month: "January",
-      year: 2024,
-      kwhGenerated: 420,
-      kwhExported: 280,
-      kwhImported: 120,
-      amount: -3200,
-      status: "paid",
-      createdAt: "2024-02-01",
-      meterReadingId: "MR-001",
-      invoiceId: "INV-BILL-2024-01",
-      pdfUrl: "/pdfs/bill-2024-01.pdf",
-    },
-    {
-      id: "BILL-002",
-      customerId: "CUST-001",
-      applicationId: "APP-001",
-      month: "February",
-      year: 2024,
-      kwhGenerated: 395,
-      kwhExported: 250,
-      kwhImported: 180,
-      amount: 2100,
-      status: "pending",
-      createdAt: "2024-03-01",
-      meterReadingId: "MR-002",
-      invoiceId: "INV-BILL-2024-02",
-      pdfUrl: "/pdfs/bill-2024-02.pdf",
-    },
-  ]
 }

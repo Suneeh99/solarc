@@ -7,9 +7,6 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -60,7 +57,7 @@ export default function InstallerDashboard() {
 
         if (currentUser?.organization) {
           const profile = installerList.find(
-            (inst) => inst.id === currentUser.organization?.id,
+            (inst) => inst.id === currentUser.organization.id,
           )
           setInstallerProfile(profile ?? null)
         }

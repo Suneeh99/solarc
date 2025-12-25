@@ -7,11 +7,8 @@ function mapBid(bid: any, applicationReference: string) {
   return {
     id: bid.id,
     applicationId: applicationReference,
-    installerId: bid.organizationId || bid.installerId || "",
-    installerName:
-      bid.organization?.name ||
-      bid.installer?.name ||
-      "Installer",
+    installerId: bid.organizationId,
+    installerName: bid.organization?.name || "Installer",
     price: bid.price,
     proposal: bid.proposal,
     warranty: bid.warranty,
@@ -30,7 +27,7 @@ function mapSession(session: any) {
     expiresAt: session.expiresAt,
     status: session.status,
     bids: session.bids.map((bid: any) =>
-      mapBid(bid, session.application.reference)
+      mapBid(bid, session.application.reference),
     ),
   }
 }
@@ -51,7 +48,11 @@ export async function GET() {
     include: {
       application: true,
       bids: {
-        include: { installer: true, organization: true, package: true },
+        include: {
+          installer: true,
+          organization: true,
+          package: true,
+        },
       },
     },
     orderBy: { startedAt: "desc" },
@@ -69,14 +70,19 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
+
   const application = await prisma.application.findFirst({
     where: { reference: body.applicationId },
   })
 
   if (!application) {
-    return NextResponse.json({ error: "Application not found" }, { status: 404 })
+    return NextResponse.json(
+      { error: "Application not found" },
+      { status: 404 },
+    )
   }
 
+  // Customer opens or extends a bid session
   if (user.role === "customer") {
     const session = await prisma.bidSession.upsert({
       where: { applicationId: application.id },
@@ -84,7 +90,7 @@ export async function POST(request: Request) {
         status: "open",
         expiresAt: addHours(
           new Date(),
-          Number(body.expiresInDays || 2) * 24
+          Number(body.expiresInDays || 2) * 24,
         ),
       },
       create: {
@@ -94,27 +100,32 @@ export async function POST(request: Request) {
         startedAt: new Date(),
         expiresAt: addHours(
           new Date(),
-          Number(body.expiresInDays || 2) * 24
+          Number(body.expiresInDays || 2) * 24,
         ),
       },
       include: {
         application: true,
         bids: {
-          include: { installer: true, organization: true, package: true },
+          include: {
+            installer: true,
+            organization: true,
+            package: true,
+          },
         },
       },
     })
 
     return NextResponse.json(
       { bidSession: mapSession(session) },
-      { status: 201 }
+      { status: 201 },
     )
   }
 
+  // Installer submits a bid
   if (user.role !== "installer" || !user.organization) {
     return NextResponse.json(
       { error: "Only installers can submit bids" },
-      { status: 403 }
+      { status: 403 },
     )
   }
 
@@ -122,7 +133,7 @@ export async function POST(request: Request) {
     (body.bidSessionId &&
       (await prisma.bidSession.findUnique({
         where: { id: body.bidSessionId },
-        include: { application: true, bids: true },
+        include: { application: true },
       }))) ||
     (await prisma.bidSession.upsert({
       where: { applicationId: application.id },
@@ -134,7 +145,7 @@ export async function POST(request: Request) {
         startedAt: new Date(),
         expiresAt: addHours(new Date(), 48),
       },
-      include: { application: true, bids: true },
+      include: { application: true },
     }))
 
   const bid = await prisma.bid.create({
@@ -159,6 +170,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json(
     { bid: mapBid(bid, application.reference) },
-    { status: 201 }
+    { status: 201 },
   )
 }

@@ -183,14 +183,9 @@ export default function CustomerDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard icon={Leaf} label="CO₂ Prevented" value={`${stats.totalCO2Prevented} tons`} />
-          <StatCard icon={Sun} label="Energy Generated" value={`${stats.totalEnergyGenerated} kWh`} color="amber" />
-          <StatCard
-            icon={TrendingUp}
-            label="Monthly Savings"
-            value={`Rs. ${stats.monthlySavings.toLocaleString()}`}
-            color="blue"
-          />
-          <StatCard icon={Zap} label="System Capacity" value={`${stats.systemCapacity} kW`} color="cyan" />
+          <StatCard icon={Sun} label="Energy Generated" value={`${stats.totalEnergyGenerated} kWh`} />
+          <StatCard icon={TrendingUp} label="Monthly Savings" value={`Rs. ${stats.monthlySavings.toLocaleString()}`} />
+          <StatCard icon={Zap} label="System Capacity" value={`${stats.systemCapacity} kW`} />
         </div>
 
         {/* Applications */}
@@ -239,7 +234,8 @@ export default function CustomerDashboard() {
                       <div>
                         <p className="font-medium">{app.id}</p>
                         <p className="text-sm text-muted-foreground">
-                          Created on {new Date(app.createdAt).toLocaleDateString()}
+                          Created on{" "}
+                          {new Date(app.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                       <div className="flex items-center gap-4">
@@ -270,19 +266,17 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  color = "emerald",
 }: {
   icon: React.ElementType
   label: string
   value: string
-  color?: string
 }) {
   return (
     <Card>
       <CardContent className="p-6">
         <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl bg-${color}-500/10 flex items-center justify-center`}>
-            <Icon className={`w-6 h-6 text-${color}-500`} />
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+            <Icon className="w-6 h-6 text-emerald-500" />
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>

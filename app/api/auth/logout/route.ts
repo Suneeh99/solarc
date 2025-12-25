@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { logoutUser } from "@/lib/services/auth"
+import { clearSession } from "@/lib/auth-server"
 
 export async function POST() {
-  await logoutUser()
-  return NextResponse.json({ ok: true })
+  await clearSession()
+  return NextResponse.json({ success: true })
 }
