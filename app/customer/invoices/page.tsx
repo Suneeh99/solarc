@@ -1,182 +1,185 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Receipt, Clock, CheckCircle, AlertCircle, Download, CreditCard } from "lucide-react"
-import { Invoice, MonthlyBill } from "@/lib/prisma-types"
+
+import {
+  Receipt,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Download,
+  CreditCard,
+} from "lucide-react"
+
+import type { Invoice, MonthlyBill } from "@/lib/prisma-types"
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case "paid":
+      return (
+        <Badge className="bg-emerald-500/10 text-emerald-600" variant="secondary">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Paid
+        </Badge>
+      )
+    case "overdue":
+      return (
+        <Badge className="bg-red-500/10 text-red-600" variant="secondary">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          Overdue
+        </Badge>
+      )
+    default:
+      return (
+        <Badge className="bg-amber-500/10 text-amber-600" variant="secondary">
+          <Clock className="w-3 h-3 mr-1" />
+          Pending
+        </Badge>
+      )
+  }
+}
+
+function getTypeBadge(type: Invoice["type"]) {
+  const map: Record<Invoice["type"], string> = {
+    authority_fee: "Authority Fee",
+    installation: "Installation",
+    monthly_bill: "Monthly Bill",
+  }
+
+  const styles: Record<Invoice["type"], string> = {
+    authority_fee: "bg-purple-500/10 text-purple-600",
+    installation: "bg-emerald-500/10 text-emerald-600",
+    monthly_bill: "bg-blue-500/10 text-blue-600",
+  }
+
+  return (
+    <Badge variant="secondary" className={styles[type]}>
+      {map[type]}
+    </Badge>
+  )
+}
+
+function SummaryCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: number
+  icon: React.ElementType
+  tone: "amber" | "emerald" | "blue"
+}) {
+  const tones = {
+    amber: "bg-amber-500/10 text-amber-600",
+    emerald: "bg-emerald-500/10 text-emerald-600",
+    blue: "bg-blue-500/10 text-blue-600",
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${tones[tone]}`}>
+            <Icon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold">
+              Rs. {Math.abs(value).toLocaleString()}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function CustomerInvoices() {
-  const customerId = "CUST-001"
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [monthlyBills, setMonthlyBills] = useState<(MonthlyBill & { invoice?: Invoice | null })[]>([])
+  const [monthlyBills, setMonthlyBills] = useState<MonthlyBill[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchInvoices = async () => {
+    async function load() {
       try {
-        setLoading(true)
-        const response = await fetch(`/api/invoices?customerId=${customerId}&includeMonthly=true`)
-        if (!response.ok) throw new Error("Unable to load invoices")
-        const data = await response.json()
+        const res = await fetch("/api/payments?includeMonthly=true", {
+          cache: "no-store",
+        })
+
+        if (!res.ok) throw new Error("Failed to load payments")
+
+        const data = await res.json()
         setInvoices(data.invoices ?? [])
         setMonthlyBills(data.monthlyBills ?? [])
-      } catch (err) {
-        console.error(err)
-        setError("Failed to load invoices")
+      } catch {
+        setError("Unable to load invoices")
       } finally {
         setLoading(false)
       }
     }
-    fetchInvoices()
+
+    load()
   }, [])
 
-  const pendingTotal = useMemo(
-    () => invoices.filter((inv) => inv.status === "pending").reduce((sum, inv) => sum + inv.amount, 0),
-    [invoices],
-  )
-  const paidTotal = useMemo(
-    () => invoices.filter((inv) => inv.status === "paid").reduce((sum, inv) => sum + inv.amount, 0),
-    [invoices],
-  )
-  const netCredit = useMemo(
-    () =>
-      monthlyBills
-        .map((bill) => bill.netAmount ?? bill.invoice?.amount ?? 0)
-        .filter((amount) => amount < 0)
-        .reduce((sum, amt) => sum + amt, 0),
-    [monthlyBills],
-  )
-
-  const handleCreatePayment = async (invoice: Invoice) => {
-    setPaymentMessage(null)
-    try {
-      const response = await fetch("/api/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: invoice.amount,
-          customerId,
-          applicationId: invoice.applicationId,
-          invoiceId: invoice.id,
-          type: invoice.type,
-          description: invoice.description,
-          paymentMethod: "online",
-        }),
-      })
-      if (!response.ok) throw new Error("Failed to create payment")
-      const data = await response.json()
-      setPaymentMessage(`Payment intent created. Client secret: ${data.clientSecret}`)
-    } catch (err) {
-      console.error(err)
-      setError("Unable to start payment")
+  const summary = useMemo(() => {
+    return {
+      pending: invoices
+        .filter((i) => i.status === "pending")
+        .reduce((s, i) => s + i.amount, 0),
+      paid: invoices
+        .filter((i) => i.status === "paid")
+        .reduce((s, i) => s + i.amount, 0),
+      credit: monthlyBills
+        .filter((b) => b.amount < 0)
+        .reduce((s, b) => s + b.amount, 0),
     }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return (
-          <Badge className="bg-amber-500/10 text-amber-600" variant="secondary">
-            <Clock className="w-3 h-3 mr-1" />
-            Pending
-          </Badge>
-        )
-      case "paid":
-        return (
-          <Badge className="bg-emerald-500/10 text-emerald-600" variant="secondary">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Paid
-          </Badge>
-        )
-      case "overdue":
-        return (
-          <Badge className="bg-red-500/10 text-red-600" variant="secondary">
-            <AlertCircle className="w-3 h-3 mr-1" />
-            Overdue
-          </Badge>
-        )
-      default:
-        return null
-    }
-  }
-
-  const formatMonth = (month: number) => new Date(2000, month - 1, 1).toLocaleString("default", { month: "long" })
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <h1 className="text-2xl font-bold text-foreground">Invoices & Bills</h1>
-          <Card>
-            <CardContent className="p-6 text-muted-foreground">Loading invoices...</CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    )
-  }
+  }, [invoices, monthlyBills])
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Invoices & Bills</h1>
-          <p className="text-muted-foreground">View and manage your payments and monthly energy bills</p>
+          <h1 className="text-2xl font-bold">Invoices & Bills</h1>
+          <p className="text-muted-foreground">
+            Authority fees, installations, and net metering statements
+          </p>
         </div>
 
-        {error && <p className="text-sm text-red-600 bg-red-500/10 p-3 rounded">{error}</p>}
-        {paymentMessage && <p className="text-sm text-emerald-700 bg-emerald-500/10 p-3 rounded">{paymentMessage}</p>}
+        {error && (
+          <div className="p-3 rounded bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
 
-        {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold text-foreground">Rs. {pendingTotal.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Paid</p>
-                  <p className="text-2xl font-bold text-foreground">Rs. {paidTotal.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <Receipt className="w-6 h-6 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Net Metering Credit</p>
-                  <p className="text-2xl font-bold text-emerald-500">Rs. {Math.abs(netCredit).toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <SummaryCard label="Pending" value={summary.pending} icon={Clock} tone="amber" />
+          <SummaryCard label="Paid" value={summary.paid} icon={CheckCircle} tone="emerald" />
+          <SummaryCard label="Net Credit" value={summary.credit} icon={Receipt} tone="blue" />
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="invoices">
           <TabsList>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
@@ -186,52 +189,61 @@ export default function CustomerInvoices() {
           <TabsContent value="invoices" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-foreground">Payment Invoices</CardTitle>
-                <CardDescription>Authority fees and installation payments</CardDescription>
+                <CardTitle>Invoices</CardTitle>
+                <CardDescription>Payment requests and receipts</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {invoices.map((invoice) => (
+              <CardContent className="space-y-4">
+                {loading ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    Loading invoices…
+                  </div>
+                ) : invoices.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    No invoices available
+                  </div>
+                ) : (
+                  invoices.map((inv) => (
                     <div
-                      key={invoice.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border border-border"
+                      key={inv.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg"
                     >
-                      <div className="flex items-center gap-4 mb-4 sm:mb-0">
-                        <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                          <Receipt className="w-6 h-6 text-blue-500" />
-                        </div>
+                      <div className="flex items-center gap-4">
+                        <Receipt className="w-6 h-6 text-blue-500" />
                         <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-foreground">{invoice.id}</p>
-                            {getStatusBadge(invoice.status)}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{inv.id}</span>
+                            {getStatusBadge(inv.status)}
+                            {getTypeBadge(inv.type)}
                           </div>
-                          <p className="text-sm text-muted-foreground">{invoice.description}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Due: {new Date(invoice.dueDate).toLocaleDateString()}
-                            {invoice.paidAt && ` • Paid: ${new Date(invoice.paidAt).toLocaleDateString()}`}
+                          <p className="text-sm text-muted-foreground">
+                            {inv.description}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <p className="text-lg font-bold text-foreground">Rs. {invoice.amount.toLocaleString()}</p>
-                        {invoice.status === "pending" ? (
-                          <Button
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                            onClick={() => handleCreatePayment(invoice)}
-                          >
+
+                      <div className="flex items-center gap-3 mt-4 sm:mt-0">
+                        <span className="font-bold">
+                          Rs. {inv.amount.toLocaleString()}
+                        </span>
+                        {inv.status === "pending" ? (
+                          <Button className="bg-emerald-600 hover:bg-emerald-700">
                             <CreditCard className="w-4 h-4 mr-2" />
-                            Pay Now
+                            Pay
                           </Button>
                         ) : (
-                          <Button variant="outline" size="sm" className="bg-transparent">
-                            <Download className="w-4 h-4 mr-2" />
-                            Download
-                          </Button>
+                          inv.pdfUrl && (
+                            <Button variant="outline" size="sm" asChild>
+                              <a href={inv.pdfUrl} download>
+                                <Download className="w-4 h-4 mr-2" />
+                                PDF
+                              </a>
+                            </Button>
+                          )
                         )}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -239,52 +251,58 @@ export default function CustomerInvoices() {
           <TabsContent value="monthly" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-foreground">Monthly Energy Bills</CardTitle>
-                <CardDescription>Net metering statements and energy usage</CardDescription>
+                <CardTitle>Monthly Bills</CardTitle>
+                <CardDescription>Net metering statements</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {monthlyBills.map((bill) => (
-                    <div key={bill.id} className="p-4 rounded-lg border border-border">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 mb-2 sm:mb-0">
-                          <p className="font-semibold text-foreground">
-                            {formatMonth(bill.month)} {bill.year}
-                          </p>
-                          {getStatusBadge(bill.invoice?.status ?? "paid")}
-                        </div>
-                        <p
-                          className={`text-lg font-bold ${
-                            bill.netAmount < 0 || (bill.invoice?.amount ?? 0) < 0 ? "text-emerald-500" : "text-foreground"
+              <CardContent className="space-y-4">
+                {loading ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    Loading bills…
+                  </div>
+                ) : monthlyBills.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    No monthly bills
+                  </div>
+                ) : (
+                  monthlyBills.map((bill) => (
+                    <div key={bill.id} className="p-4 border rounded-lg">
+                      <div className="flex justify-between mb-3">
+                        <span className="font-semibold">
+                          {new Date(bill.year, bill.month - 1).toLocaleString("default", {
+                            month: "long",
+                          })}{" "}
+                          {bill.year}
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            bill.amount < 0 ? "text-emerald-600" : ""
                           }`}
                         >
-                          {bill.netAmount < 0 || (bill.invoice?.amount ?? 0) < 0 ? "Credit: " : ""}
-                          Rs. {Math.abs(bill.netAmount ?? bill.invoice?.amount ?? 0).toLocaleString()}
-                        </p>
+                          Rs. {Math.abs(bill.amount).toLocaleString()}
+                        </span>
                       </div>
+
                       <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div className="p-3 rounded-lg bg-muted/50">
+                        <div>
                           <p className="text-muted-foreground">Generated</p>
-                          <p className="font-semibold text-foreground">{bill.kwhGenerated} kWh</p>
+                          <p className="font-semibold">{bill.kwhGenerated} kWh</p>
                         </div>
-                        <div className="p-3 rounded-lg bg-emerald-500/10">
+                        <div>
                           <p className="text-muted-foreground">Exported</p>
-                          <p className="font-semibold text-emerald-500">{bill.kwhExported} kWh</p>
+                          <p className="font-semibold text-emerald-600">
+                            {bill.kwhExported} kWh
+                          </p>
                         </div>
-                        <div className="p-3 rounded-lg bg-amber-500/10">
+                        <div>
                           <p className="text-muted-foreground">Imported</p>
-                          <p className="font-semibold text-amber-500">{bill.kwhImported} kWh</p>
+                          <p className="font-semibold text-amber-600">
+                            {bill.kwhImported} kWh
+                          </p>
                         </div>
-                      </div>
-                      <div className="mt-4 flex justify-end">
-                        <Button variant="outline" size="sm" className="bg-transparent">
-                          <Download className="w-4 h-4 mr-2" />
-                          Download Statement
-                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,63 +1,114 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Role, InvoiceType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { InvoiceType } from "@/lib/prisma-types"
+import { getSessionUser, requireRole } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
+/* ------------------------------------------------------------------ */
+/* GET /api/payments                                                   */
+/* ------------------------------------------------------------------ */
+
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const { searchParams } = new URL(req.url)
-  const customerId = searchParams.get("customerId")
   const includeMonthly = searchParams.get("includeMonthly") === "true"
 
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      ...(customerId ? { customerId } : {}),
-    },
-  })
+  let invoices = []
 
-  let monthlyBills = []
-  if (includeMonthly) {
-    const bills = await prisma.monthlyBill.findMany({
-      where: customerId ? { customerId } : undefined,
+  if (user.role === Role.customer) {
+    invoices = await prisma.invoice.findMany({
+      where: { customerId: user.id },
+      include: { payments: true, application: true },
     })
-    monthlyBills = bills.map((bill) => ({
-      ...bill,
-      invoice: invoices.find((inv) => inv.id === bill.invoiceId) ?? null,
-    }))
+  } else if (user.role === Role.installer) {
+    invoices = await prisma.invoice.findMany({
+      where: { installerId: user.id },
+      include: { payments: true, application: true },
+    })
+  } else {
+    const forbidden = requireRole(user.role, [Role.officer])
+    if (forbidden) return forbidden
+
+    invoices = await prisma.invoice.findMany({
+      include: { payments: true, application: true },
+    })
+  }
+
+  let monthlyBills: any[] = []
+
+  if (includeMonthly) {
+    if (user.role === Role.customer) {
+      monthlyBills = await prisma.monthlyBill.findMany({
+        where: { customerId: user.id },
+      })
+    } else if (user.role === Role.officer) {
+      monthlyBills = await prisma.monthlyBill.findMany()
+    }
   }
 
   return NextResponse.json({ invoices, monthlyBills })
 }
 
+/* ------------------------------------------------------------------ */
+/* POST /api/payments                                                  */
+/* ------------------------------------------------------------------ */
+
 export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const { customerId, amount, type, description, dueDate, applicationId, lineItems } = body as {
-    customerId?: string
-    amount?: number
-    type?: InvoiceType
-    description?: string
-    dueDate?: string
-    applicationId?: string | null
-    lineItems?: unknown
+  const user = await getSessionUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!customerId || !amount || !type || !description || !dueDate) {
-    return NextResponse.json({ error: "customerId, amount, type, description and dueDate are required" }, { status: 400 })
+  const forbidden = requireRole(user.role, [Role.officer])
+  if (forbidden) return forbidden
+
+  const body = await req.json()
+  const {
+    applicationId,
+    customerId,
+    installerId,
+    type,
+    amount,
+    dueDate,
+    description,
+    lineItems,
+  }: {
+    applicationId?: string | null
+    customerId?: string
+    installerId?: string
+    type?: InvoiceType
+    amount?: number
+    dueDate?: string
+    description?: string
+    lineItems?: unknown
+  } = body
+
+  if (!customerId || !type || !amount || !dueDate || !description) {
+    return NextResponse.json(
+      { error: "customerId, type, amount, dueDate, and description are required" },
+      { status: 400 },
+    )
   }
 
   const invoice = await prisma.invoice.create({
     data: {
-      customerId,
       applicationId: applicationId ?? null,
-      amount,
+      customerId,
+      installerId,
       type,
+      amount,
       description,
       status: "pending",
-      dueDate,
+      dueDate: new Date(dueDate),
       paidAt: null,
       lineItems: Array.isArray(lineItems) ? lineItems : null,
     },
   })
 
-  return NextResponse.json({ invoice })
+  return NextResponse.json({ invoice }, { status: 201 })
 }

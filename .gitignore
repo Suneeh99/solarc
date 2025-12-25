@@ -1,7 +1,25 @@
+# Dependencies and build output
 node_modules
-.env
 .next
-data/db.json
+.turbo
+dist
+out
+.vercel
+
+# Local databases
+dev.db
 prisma/dev.db
+data/db.json
+
+# Environment variables
+.env
+.env*
+.env.local
+
+# Logs
 npm-debug.log*
 pnpm-debug.log*
+*.log
+
+# OS files
+.DS_Store

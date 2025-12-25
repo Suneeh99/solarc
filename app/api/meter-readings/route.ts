@@ -1,41 +1,106 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Role } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { getSessionUser, requireRole } from "@/lib/auth-server"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const customerId = searchParams.get("customerId")
+/* ------------------------------------------------------------------ */
+/* GET /api/meter-readings                                             */
+/* ------------------------------------------------------------------ */
+
+export async function GET() {
+  const user = await getSessionUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (user.role === Role.customer) {
+    const readings = await prisma.meterReading.findMany({
+      where: { application: { customerId: user.id } },
+      orderBy: { readingDate: "desc" },
+    })
+    return NextResponse.json({ readings })
+  }
+
+  if (user.role === Role.installer) {
+    const readings = await prisma.meterReading.findMany({
+      where: { application: { installerId: user.id } },
+      orderBy: { readingDate: "desc" },
+    })
+    return NextResponse.json({ readings })
+  }
+
+  const forbidden = requireRole(user.role, [Role.officer])
+  if (forbidden) return forbidden
+
   const readings = await prisma.meterReading.findMany({
-    where: customerId ? { customerId } : undefined,
+    orderBy: { readingDate: "desc" },
   })
+
   return NextResponse.json({ readings })
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const { customerId, applicationId, month, year, readingDate, unitsConsumed, unitsGenerated, status, notes } = body
+/* ------------------------------------------------------------------ */
+/* POST /api/meter-readings                                            */
+/* ------------------------------------------------------------------ */
 
-  if (!customerId || !month || !year || !readingDate || unitsConsumed === undefined || unitsGenerated === undefined) {
-    return NextResponse.json({ error: "customerId, month, year, readingDate, unitsConsumed and unitsGenerated are required" }, { status: 400 })
+export async function POST(req: NextRequest) {
+  const user = await getSessionUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const netUnits = Number(unitsConsumed) - Number(unitsGenerated)
+  const forbidden = requireRole(user.role, [Role.officer])
+  if (forbidden) return forbidden
+
+  const body = await req.json()
+  const {
+    applicationId,
+    readingDate,
+    kwhGenerated,
+    kwhExported,
+    kwhImported,
+    notes,
+  } = body as {
+    applicationId?: string
+    readingDate?: string
+    kwhGenerated?: number
+    kwhExported?: number
+    kwhImported?: number
+    notes?: string
+  }
+
+  if (
+    !applicationId ||
+    !readingDate ||
+    kwhGenerated === undefined ||
+    kwhExported === undefined ||
+    kwhImported === undefined
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "applicationId, readingDate, kwhGenerated, kwhExported, and kwhImported are required",
+      },
+      { status: 400 },
+    )
+  }
+
+  const netUnits = Number(kwhImported) - Number(kwhExported)
 
   const reading = await prisma.meterReading.create({
     data: {
-      customerId,
-      applicationId: applicationId ?? null,
-      month,
-      year,
-      readingDate,
-      unitsConsumed,
-      unitsGenerated,
+      applicationId,
+      readingDate: new Date(readingDate),
+      kwhGenerated,
+      kwhExported,
+      kwhImported,
       netUnits,
-      status: status ?? "pending",
       notes: notes ?? null,
+      status: "pending",
     },
   })
 
-  return NextResponse.json({ reading })
+  return NextResponse.json({ reading }, { status: 201 })
 }

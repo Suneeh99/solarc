@@ -1,82 +1,69 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Gavel, Clock, MapPin, Zap, ArrowRight, CheckCircle, XCircle } from "lucide-react"
-
-const openBids = [
-  {
-    id: "BID-001",
-    customerName: "John Customer",
-    location: "Colombo 07",
-    capacity: "5 kW",
-    roofType: "Flat Concrete",
-    monthlyConsumption: "450 kWh",
-    deadline: "2h 30m",
-    description: "Looking for a reliable solar installation for my residential property.",
-    postedAt: "2024-01-20T08:00:00Z",
-  },
-  {
-    id: "BID-002",
-    customerName: "Jane Smith",
-    location: "Kandy",
-    capacity: "3 kW",
-    roofType: "Sloped Tile",
-    monthlyConsumption: "280 kWh",
-    deadline: "12h 45m",
-    description: "Need solar panels for my house. Looking for good warranty terms.",
-    postedAt: "2024-01-19T14:00:00Z",
-  },
-  {
-    id: "BID-003",
-    customerName: "Mike Johnson",
-    location: "Galle",
-    capacity: "10 kW",
-    roofType: "Metal Sheet",
-    monthlyConsumption: "800 kWh",
-    deadline: "36h 20m",
-    description: "Commercial property solar installation. Need high capacity system.",
-    postedAt: "2024-01-19T10:00:00Z",
-  },
-]
-
-const myBids = [
-  {
-    id: "BID-004",
-    customerName: "Sarah Williams",
-    location: "Negombo",
-    capacity: "5 kW",
-    myBidAmount: 420000,
-    status: "accepted",
-    submittedAt: "2024-01-18",
-  },
-  {
-    id: "BID-005",
-    customerName: "Tom Brown",
-    location: "Colombo 05",
-    capacity: "3 kW",
-    myBidAmount: 320000,
-    status: "pending",
-    submittedAt: "2024-01-19",
-  },
-  {
-    id: "BID-006",
-    customerName: "Lisa Green",
-    location: "Matara",
-    capacity: "5 kW",
-    myBidAmount: 450000,
-    status: "rejected",
-    submittedAt: "2024-01-17",
-  },
-]
+import { Gavel, Clock, MapPin, Zap, ArrowRight, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { getUser, type BidSession, type Bid, type User } from "@/lib/auth"
 
 export default function InstallerBids() {
   const [activeTab, setActiveTab] = useState("open")
+  const [user, setUser] = useState<User | null>(null)
+  const [sessions, setSessions] = useState<BidSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    setUser(getUser())
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000 * 60)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      setError(null)
+      try {
+        const res = await fetch("/api/bids")
+        if (!res.ok) throw new Error("Unable to load bids")
+        const data = await res.json()
+        setSessions(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unexpected error")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSessions()
+  }, [])
+
+  const installerId = user?.id ?? "INS-001"
+
+  const openBids = useMemo(() => sessions.filter((session) => session.status === "open"), [sessions])
+
+  const myBids: (Bid & { sessionId: string; capacity?: string; address?: string })[] = useMemo(() => {
+    const submissions: (Bid & { sessionId: string; capacity?: string; address?: string })[] = []
+    sessions.forEach((session) => {
+      session.bids.forEach((bid) => {
+        if (bid.installerId === installerId) {
+          submissions.push({
+            ...bid,
+            sessionId: session.id,
+            capacity: session.applicationDetails?.capacity,
+            address: session.applicationDetails?.address,
+          })
+        }
+      })
+    })
+    return submissions
+  }, [installerId, sessions])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -106,6 +93,16 @@ export default function InstallerBids() {
     }
   }
 
+  const countdown = (expiresAt: string) => {
+    const diff = new Date(expiresAt).getTime() - now.getTime()
+    if (diff <= 0) return "Expired"
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
+    return days > 0 ? `${days}d ${remainingHours}h` : `${hours}h ${minutes}m`
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -123,7 +120,16 @@ export default function InstallerBids() {
           </TabsList>
 
           <TabsContent value="open" className="mt-4 space-y-4">
-            {openBids.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading bids...
+              </div>
+            ) : error ? (
+              <Card>
+                <CardContent className="py-4 text-destructive">{error}</CardContent>
+              </Card>
+            ) : openBids.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Gavel className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -139,30 +145,30 @@ export default function InstallerBids() {
                       <div className="flex-1 space-y-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h3 className="font-semibold text-lg text-foreground">{bid.customerName}</h3>
+                            <h3 className="font-semibold text-lg text-foreground">{bid.applicationId}</h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                               <MapPin className="w-4 h-4" />
-                              {bid.location}
+                              {bid.applicationDetails?.address ?? "Address not provided"}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 text-amber-500">
                             <Clock className="w-4 h-4" />
-                            <span className="font-medium">{bid.deadline}</span>
+                            <span className="font-medium">{countdown(bid.expiresAt)}</span>
                           </div>
                         </div>
 
-                        <p className="text-muted-foreground">{bid.description}</p>
+                        <p className="text-muted-foreground">{bid.requirements ?? "No additional requirements"}</p>
 
                         <div className="flex flex-wrap gap-3">
                           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 text-sm">
                             <Zap className="w-3 h-3" />
-                            {bid.capacity}
+                            {bid.applicationDetails?.capacity ?? "Capacity TBD"}
+                          </div>
+                          <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm capitalize">
+                            {bid.bidType} bid
                           </div>
                           <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">
-                            {bid.roofType}
-                          </div>
-                          <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">
-                            {bid.monthlyConsumption}/month
+                            {new Date(bid.startedAt).toLocaleDateString()}
                           </div>
                         </div>
                       </div>
@@ -192,7 +198,12 @@ export default function InstallerBids() {
                 <CardDescription>Track the status of your bid submissions</CardDescription>
               </CardHeader>
               <CardContent>
-                {myBids.length === 0 ? (
+                {loading ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading bids...
+                  </div>
+                ) : myBids.length === 0 ? (
                   <div className="text-center py-8">
                     <Gavel className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
                     <p className="text-muted-foreground">{"You haven't submitted any bids yet"}</p>
@@ -206,20 +217,20 @@ export default function InstallerBids() {
                       >
                         <div className="mb-3 sm:mb-0">
                           <div className="flex items-center gap-2">
-                            <p className="font-semibold text-foreground">{bid.customerName}</p>
+                            <p className="font-semibold text-foreground">{bid.sessionId}</p>
                             {getStatusBadge(bid.status)}
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {bid.location} • {bid.capacity}
+                            {bid.address ?? "Location TBD"} • {bid.capacity ?? "Capacity TBD"}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Submitted: {new Date(bid.submittedAt).toLocaleDateString()}
+                            Submitted: {new Date(bid.createdAt).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="flex items-center justify-between sm:justify-end gap-4">
                           <div className="text-right">
                             <p className="text-sm text-muted-foreground">Your Bid</p>
-                            <p className="font-bold text-foreground">Rs. {bid.myBidAmount.toLocaleString()}</p>
+                            <p className="font-bold text-foreground">Rs. {bid.price.toLocaleString()}</p>
                           </div>
                           {bid.status === "accepted" && (
                             <Link href={`/installer/orders/${bid.id}`}>
