@@ -11,13 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Building, Star, CheckCircle, Package, MapPin, Phone, Gavel } from "lucide-react"
-import { getDemoInstallers, type Installer, type SolarPackage } from "@/lib/auth"
-
-// Demo approved applications for customer
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import { getApprovedApplications, getDemoInstallers, type Application, type Installer, type SolarPackage } from "@/lib/auth"
 
 export default function InstallerPackagesPage({
   params,
@@ -27,6 +21,7 @@ export default function InstallerPackagesPage({
   const resolvedParams = use(params)
   const [installer, setInstaller] = useState<Installer | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
 
   // Bid dialog state
   const [openBidDialog, setOpenBidDialog] = useState(false)
@@ -53,11 +48,17 @@ export default function InstallerPackagesPage({
     )
 
     if (foundInstaller) {
-      setInstaller(foundInstaller)
-      setError(null)
+      if (!foundInstaller.verified) {
+        setInstaller(null)
+        setError(`Installer "${resolvedParams.id}" is not verified yet`)
+      } else {
+        setInstaller(foundInstaller)
+        setError(null)
+      }
     } else {
       setError(`Installer "${resolvedParams.id}" not found`)
     }
+    setApprovedApplications(getApprovedApplications())
   }, [resolvedParams]) // Updated to use resolvedParams directly
 
   const handleOpenBidDialog = (pkg: SolarPackage) => {
@@ -135,6 +136,16 @@ export default function InstallerPackagesPage({
             <p className="text-muted-foreground">View all available packages</p>
           </div>
         </div>
+
+        {!approvedApplications.length && (
+          <Card className="border-dashed">
+            <CardContent className="p-4">
+              <p className="text-sm text-red-500">
+                You need an approved application to select packages or request quotes.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Installer Info Card */}
         <Card>
@@ -220,8 +231,25 @@ export default function InstallerPackagesPage({
                     <div className="space-y-3">
                       <p className="text-lg font-bold text-emerald-500">Rs. {pkg.price.toLocaleString()}</p>
                       <div className="flex gap-2">
-                        <Link href={`/customer/installers/${installer.id}/packages/${pkg.id}`} className="flex-1">
-                          <Button size="sm" variant="outline" className="w-full bg-transparent">
+                        <Link
+                          href={
+                            approvedApplications.length > 0
+                              ? `/customer/installers/${installer.id}/packages/${pkg.id}`
+                              : "/customer/applications"
+                          }
+                          className="flex-1"
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full bg-transparent"
+                            disabled={approvedApplications.length === 0}
+                            title={
+                              approvedApplications.length === 0
+                                ? "You need an approved application to select a package"
+                                : undefined
+                            }
+                          >
                             View Details
                           </Button>
                         </Link>
@@ -229,6 +257,12 @@ export default function InstallerPackagesPage({
                           size="sm"
                           className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white"
                           onClick={() => handleOpenBidDialog(pkg)}
+                          disabled={approvedApplications.length === 0}
+                          title={
+                            approvedApplications.length === 0
+                              ? "You need an approved application to request a quote"
+                              : undefined
+                          }
                         >
                           <Gavel className="w-3 h-3 mr-1" />
                           Quote
@@ -272,7 +306,7 @@ export default function InstallerPackagesPage({
                   <SelectContent>
                     {approvedApplications.map((app) => (
                       <SelectItem key={app.id} value={app.id}>
-                        {app.id} - {app.address} ({app.capacity})
+                        {app.id} - {app.technicalDetails.roofArea} ({app.technicalDetails.connectionPhase})
                       </SelectItem>
                     ))}
                   </SelectContent>

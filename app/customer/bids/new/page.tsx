@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,21 +11,24 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Calendar, Clock, Users, Zap, Info } from "lucide-react"
 import Link from "next/link"
-
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import { getApprovedApplications } from "@/lib/auth"
 
 export default function NewBidSession() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const approvedApplications = useMemo(() => getApprovedApplications(), [])
 
   const preSelectedApp = searchParams.get("application") || ""
   const preSelectedInstaller = searchParams.get("installer") || ""
   const preSelectedPackage = searchParams.get("package") || ""
+  const defaultSelectedApp = useMemo(() => {
+    if (preSelectedApp && approvedApplications.some((app) => app.id === preSelectedApp)) {
+      return preSelectedApp
+    }
+    return approvedApplications[0]?.id || ""
+  }, [preSelectedApp, approvedApplications])
 
-  const [selectedApplication, setSelectedApplication] = useState(preSelectedApp)
+  const [selectedApplication, setSelectedApplication] = useState(defaultSelectedApp)
   const [bidDuration, setBidDuration] = useState("7")
   const [maxBudget, setMaxBudget] = useState("")
   const [requirements, setRequirements] = useState(
@@ -148,11 +151,15 @@ export default function NewBidSession() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-foreground">{app.id}</p>
-                      <p className="text-sm text-muted-foreground">{app.address}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.technicalDetails.roofArea} • {app.technicalDetails.connectionPhase}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-emerald-500">{app.capacity}</p>
-                      <p className="text-xs text-muted-foreground">Approved {app.approvedDate}</p>
+                      <p className="font-medium text-emerald-500">{app.status}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Updated {new Date(app.updatedAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
                 </div>

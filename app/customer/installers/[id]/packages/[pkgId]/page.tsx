@@ -33,13 +33,7 @@ import {
   Phone,
   Mail,
 } from "lucide-react"
-import { getDemoInstallers, type Installer, type SolarPackage } from "@/lib/auth"
-
-// Demo approved applications for customer
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import { getApprovedApplications, getDemoInstallers, type Application, type Installer, type SolarPackage } from "@/lib/auth"
 
 export default function PackageDetailPage() {
   const params = useParams()
@@ -49,6 +43,7 @@ export default function PackageDetailPage() {
   const router = useRouter()
   const [installer, setInstaller] = useState<Installer | null>(null)
   const [pkg, setPkg] = useState<SolarPackage | null>(null)
+  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
   const [openBidDialog, setOpenBidDialog] = useState(false)
   const [selectedApplication, setSelectedApplication] = useState("")
   const [bidDuration, setBidDuration] = useState("7")
@@ -68,6 +63,12 @@ export default function PackageDetailPage() {
     console.log("[v0] Found installer:", foundInstaller?.id, foundInstaller?.companyName)
 
     if (foundInstaller) {
+      if (!foundInstaller.verified) {
+        setError(`Installer "${foundInstaller.companyName}" is not verified yet`)
+        setInstaller(null)
+        setPkg(null)
+        return
+      }
       setInstaller(foundInstaller)
       console.log(
         "[v0] Looking for package:",
@@ -87,6 +88,7 @@ export default function PackageDetailPage() {
     } else {
       setError(`Installer "${id}" not found`)
     }
+    setApprovedApplications(getApprovedApplications())
   }, [id, pkgId])
 
   const handleCreateBid = () => {
@@ -152,6 +154,16 @@ export default function PackageDetailPage() {
             <p className="text-muted-foreground">by {installer.companyName}</p>
           </div>
         </div>
+
+        {!approvedApplications.length && (
+          <Card className="border-dashed">
+            <CardContent className="p-4">
+              <p className="text-sm text-red-500">
+                You need an approved application to request a quote or proceed with this package.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Installer Info Card */}
         <Card>
@@ -317,7 +329,15 @@ export default function PackageDetailPage() {
                 {/* Open Bid Dialog */}
                 <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
                   <DialogTrigger asChild>
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={approvedApplications.length === 0}
+                      title={
+                        approvedApplications.length === 0
+                          ? "You need an approved application before opening a bid"
+                          : undefined
+                      }
+                    >
                       <Gavel className="w-4 h-4 mr-2" />
                       Request Quote / Open Bid
                     </Button>
@@ -348,7 +368,7 @@ export default function PackageDetailPage() {
                           <SelectContent>
                             {approvedApplications.map((app) => (
                               <SelectItem key={app.id} value={app.id}>
-                                {app.id} - {app.address} ({app.capacity})
+                                {app.id} - {app.technicalDetails.roofArea} ({app.technicalDetails.connectionPhase})
                               </SelectItem>
                             ))}
                           </SelectContent>

@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, Building, Star, CheckCircle, Package, ArrowRight, MapPin, Phone } from "lucide-react"
-import { getDemoInstallers, type Installer } from "@/lib/auth"
+import { getApprovedApplications, getDemoInstallers, type Installer } from "@/lib/auth"
 
 export default function CustomerInstallers() {
   const [installers, setInstallers] = useState<Installer[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [hasApprovedApplication, setHasApprovedApplication] = useState(false)
 
   useEffect(() => {
     console.log("[v0] CustomerInstallers - Loading installers")
@@ -22,6 +23,7 @@ export default function CustomerInstallers() {
       allInstallers.map((i) => ({ id: i.id, name: i.companyName, packageCount: i.packages.length })),
     )
     setInstallers(allInstallers)
+    setHasApprovedApplication(getApprovedApplications().length > 0)
   }, [])
 
   const filteredInstallers = installers.filter(
@@ -50,6 +52,11 @@ export default function CustomerInstallers() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {!hasApprovedApplication && (
+                <p className="text-xs text-red-500 mt-2">
+                  You need an approved application before selecting packages or requesting quotes.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -111,8 +118,18 @@ export default function CustomerInstallers() {
                       <Package className="w-4 h-4 text-emerald-500" />
                       Available Packages ({installer.packages.length})
                     </h4>
-                    <Link href={`/customer/installers/${installer.id}/packages`}>
-                      <Button variant="outline" size="sm" className="bg-transparent">
+                    <Link
+                      href={
+                        hasApprovedApplication ? `/customer/installers/${installer.id}/packages` : "/customer/applications"
+                      }
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                        disabled={!hasApprovedApplication}
+                        title={hasApprovedApplication ? undefined : "Submit an application and get approved to continue"}
+                      >
                         View All Packages
                         <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
@@ -137,8 +154,21 @@ export default function CustomerInstallers() {
                         </div>
                         <div className="flex items-center justify-between">
                           <p className="text-lg font-bold text-emerald-500">Rs. {pkg.price.toLocaleString()}</p>
-                          <Link href={`/customer/installers/${installer.id}/packages/${pkg.id}`}>
-                            <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                          <Link
+                            href={
+                              hasApprovedApplication
+                                ? `/customer/installers/${installer.id}/packages/${pkg.id}`
+                                : "/customer/applications"
+                            }
+                          >
+                            <Button
+                              size="sm"
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                              disabled={!hasApprovedApplication}
+                              title={
+                                hasApprovedApplication ? undefined : "Submit an application and get approved to continue"
+                              }
+                            >
                               Select
                               <ArrowRight className="w-3 h-3 ml-1" />
                             </Button>

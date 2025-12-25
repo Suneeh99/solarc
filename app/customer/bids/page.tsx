@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer } from "lucide-react"
+import { getApprovedApplications } from "@/lib/auth"
 
 // Demo bid sessions
 const demoBidSessions = [
@@ -34,6 +35,7 @@ const demoBidSessions = [
 
 export default function CustomerBids() {
   const [bidSessions] = useState(demoBidSessions)
+  const hasApprovedApplication = useMemo(() => getApprovedApplications().length > 0, [])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -85,8 +87,12 @@ export default function CustomerBids() {
             <h1 className="text-2xl font-bold text-foreground">My Bids</h1>
             <p className="text-muted-foreground">Manage your bid sessions and view installer proposals</p>
           </div>
-          <Link href="/customer/bids/new">
-            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
+          <Link href={hasApprovedApplication ? "/customer/bids/new" : "/customer/applications"}>
+            <Button
+              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              disabled={!hasApprovedApplication}
+              title={hasApprovedApplication ? undefined : "You need an approved application to open a bid"}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Open New Bid
             </Button>
@@ -105,6 +111,11 @@ export default function CustomerBids() {
                   best offer. If no bid is selected within 48 hours, the bid expires and you can browse packages
                   directly.
                 </p>
+                {!hasApprovedApplication && (
+                  <p className="text-xs text-red-500 mt-2">
+                    You need at least one approved application before opening bids.
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
