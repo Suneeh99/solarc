@@ -1,64 +1,142 @@
 "use client"
 
 import type React from "react"
-
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { NotificationFeed, useNotifications } from "@/components/notifications"
-import { FileText, Building, Calendar, Receipt, Clock, ArrowRight, Users, TrendingUp, Zap } from "lucide-react"
-import { getUser } from "@/lib/auth"
+
+import {
+  FileText,
+  Building,
+  Calendar,
+  Receipt,
+  Clock,
+} from "lucide-react"
+
+import {
+  fetchApplications,
+  fetchCurrentUser,
+  fetchInstallers,
+  fetchPayments,
+  fetchUsers,
+  type Application,
+  type Installer,
+  type Invoice,
+  type User,
+} from "@/lib/auth"
 
 export default function OfficerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
-  const { addNotification } = useNotifications()
+  const [user, setUser] = useState<User | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [installers, setInstallers] = useState<Installer[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setUser(getUser())
+    async function load() {
+      try {
+        const currentUser = await fetchCurrentUser()
+        setUser(currentUser)
+
+        const [apps, installerList, payments, userList] = await Promise.all([
+          fetchApplications(),
+          fetchInstallers(false),
+          fetchPayments(),
+          fetchUsers(),
+        ])
+
+        setApplications(apps)
+        setInstallers(installerList)
+        setInvoices(payments.invoices)
+        setUsers(userList)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
   }, [])
 
-  // Demo stats
-  const stats = {
-    pendingApplications: 12,
-    pendingInstallerVerifications: 3,
-    scheduledSiteVisits: 5,
-    pendingPayments: 8,
-    activeInstallations: 15,
-    totalCustomers: 156,
-    totalInstallers: 24,
-    totalCapacityMW: 2.4,
+  const stats = useMemo(() => {
+    return {
+      pendingApplications: applications.filter(
+        (a) => a.status === "pending",
+      ).length,
+
+      pendingInstallerVerifications: installers.filter(
+        (i) => !i.verified,
+      ).length,
+
+      scheduledSiteVisits: applications.filter(
+        (a) => Boolean(a.siteVisitDate),
+      ).length,
+
+      pendingPayments: invoices.filter(
+        (i) => i.status === "pending",
+      ).length,
+
+      totalCustomers: users.filter(
+        (u) => u.role === "customer",
+      ).length,
+
+      totalVerifiedInstallers: installers.filter(
+        (i) => i.verified,
+      ).length,
+    }
+  }, [applications, installers, invoices, users])
+
+  const recentApplications = applications.slice(0, 3)
+  const pendingInstallers = installers
+    .filter((i) => !i.verified)
+    .slice(0, 3)
+  const upcomingVisits = applications
+    .filter((a) => a.siteVisitDate)
+    .slice(0, 3)
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Loading dashboard...
+        </div>
+      </DashboardLayout>
+    )
   }
 
-  const recentApplications = [
-    { id: "APP-015", customerName: "David Wilson", status: "pending", createdAt: "2024-01-20" },
-    { id: "APP-014", customerName: "Emily Chen", status: "under_review", createdAt: "2024-01-19" },
-    { id: "APP-013", customerName: "Michael Brown", status: "site_visit_scheduled", createdAt: "2024-01-18" },
-  ]
-
-  const pendingVerifications = [
-    { id: "INS-003", companyName: "SunPower Systems", submittedAt: "2024-01-19" },
-    { id: "INS-004", companyName: "Green Solar Co", submittedAt: "2024-01-18" },
-  ]
-
-  const upcomingSiteVisits = [
-    { id: "SV-001", customerName: "John Customer", location: "Colombo 07", date: "2024-01-22", time: "10:00 AM" },
-    { id: "SV-002", customerName: "Lisa Green", location: "Kandy", date: "2024-01-23", time: "2:00 PM" },
-  ]
-
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-      pending: { label: "Pending", color: "bg-amber-500/10 text-amber-600", icon: Clock },
-      under_review: { label: "Under Review", color: "bg-blue-500/10 text-blue-600", icon: FileText },
-      site_visit_scheduled: { label: "Site Visit", color: "bg-cyan-500/10 text-cyan-600", icon: Calendar },
+    const map: Record<
+      string,
+      { label: string; className: string }
+    > = {
+      pending: {
+        label: "Pending",
+        className: "bg-amber-500/10 text-amber-600",
+      },
+      under_review: {
+        label: "Under Review",
+        className: "bg-blue-500/10 text-blue-600",
+      },
+      site_visit_scheduled: {
+        label: "Site Visit",
+        className: "bg-cyan-500/10 text-cyan-600",
+      },
     }
-    const { label, color, icon: Icon } = config[status] || config.pending
+
+    const cfg = map[status] ?? map.pending
     return (
-      <Badge className={color} variant="secondary">
-        <Icon className="w-3 h-3 mr-1" />
-        {label}
+      <Badge variant="secondary" className={cfg.className}>
+        <Clock className="w-3 h-3 mr-1" />
+        {cfg.label}
       </Badge>
     )
   }
@@ -68,314 +146,189 @@ export default function OfficerDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Officer Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, {user?.name}. Here is your overview.</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            Officer Dashboard
+          </h1>
+          <p className="text-muted-foreground">
+            Welcome back, {user?.name}
+          </p>
         </div>
 
-        {/* Quick Stats */}
+        {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-amber-500/20 bg-amber-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending Applications</p>
-                  <p className="text-3xl font-bold text-amber-500">{stats.pendingApplications}</p>
-                </div>
-                <FileText className="w-8 h-8 text-amber-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-blue-500/20 bg-blue-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Installer Verifications</p>
-                  <p className="text-3xl font-bold text-blue-500">{stats.pendingInstallerVerifications}</p>
-                </div>
-                <Building className="w-8 h-8 text-blue-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-cyan-500/20 bg-cyan-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Site Visits Today</p>
-                  <p className="text-3xl font-bold text-cyan-500">{stats.scheduledSiteVisits}</p>
-                </div>
-                <Calendar className="w-8 h-8 text-cyan-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-emerald-500/20 bg-emerald-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending Payments</p>
-                  <p className="text-3xl font-bold text-emerald-500">{stats.pendingPayments}</p>
-                </div>
-                <Receipt className="w-8 h-8 text-emerald-500/50" />
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Pending Applications"
+            value={stats.pendingApplications}
+            icon={FileText}
+            tone="amber"
+          />
+          <StatCard
+            label="Installer Verifications"
+            value={stats.pendingInstallerVerifications}
+            icon={Building}
+            tone="blue"
+          />
+          <StatCard
+            label="Site Visits"
+            value={stats.scheduledSiteVisits}
+            icon={Calendar}
+            tone="cyan"
+          />
+          <StatCard
+            label="Pending Payments"
+            value={stats.pendingPayments}
+            icon={Receipt}
+            tone="emerald"
+          />
         </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Users className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Customers</p>
-                  <p className="text-lg font-bold text-foreground">{stats.totalCustomers}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Building className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Verified Installers</p>
-                  <p className="text-lg font-bold text-foreground">{stats.totalInstallers}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Active Installations</p>
-                  <p className="text-lg font-bold text-foreground">{stats.activeInstallations}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Capacity</p>
-                  <p className="text-lg font-bold text-foreground">{stats.totalCapacityMW} MW</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
+        {/* Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Applications */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-base text-foreground">Recent Applications</CardTitle>
-                <CardDescription>Requires your attention</CardDescription>
-              </div>
-              <Link href="/officer/applications">
-                <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600">
-                  View All
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {recentApplications.map((app) => (
-                <div key={app.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{app.customerName}</p>
-                    <p className="text-xs text-muted-foreground">{app.id}</p>
-                  </div>
-                  {getStatusBadge(app.status)}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <ActivityCard
+            title="Recent Applications"
+            items={recentApplications.map((a) => ({
+              id: a.id,
+              title: a.customerName,
+              badge: getStatusBadge(a.status),
+            }))}
+          />
 
-          {/* Pending Verifications */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-base text-foreground">Installer Verifications</CardTitle>
-                <CardDescription>Awaiting approval</CardDescription>
-              </div>
-              <Link href="/officer/installers">
-                <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600">
-                  View All
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {pendingVerifications.map((installer) => (
-                <div
-                  key={installer.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border"
+          <ActivityCard
+            title="Installer Verifications"
+            items={pendingInstallers.map((i) => ({
+              id: i.id,
+              title: i.companyName,
+              badge: (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-500/10 text-amber-600"
                 >
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{installer.companyName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Submitted {new Date(installer.submittedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Badge className="bg-amber-500/10 text-amber-600" variant="secondary">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pending
-                  </Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Upcoming Site Visits */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-base text-foreground">Site Visits</CardTitle>
-                <CardDescription>Upcoming schedule</CardDescription>
-              </div>
-              <Link href="/officer/site-visits">
-                <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600">
-                  View All
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {upcomingSiteVisits.map((visit) => (
-                <div key={visit.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{visit.customerName}</p>
-                    <p className="text-xs text-muted-foreground">{visit.location}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-foreground">
-                      {new Date(visit.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{visit.time}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-foreground">Notification feed</CardTitle>
-                <CardDescription>Approvals, payment reminders, and installation progress updates</CardDescription>
-              </div>
-              <Badge variant="outline" className="bg-muted/60">
-                Live
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <NotificationFeed limit={4} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground">Notification & email service</CardTitle>
-              <CardDescription>SMTP + provider delivery to customers and installers</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">SMTP relay</span>
-                <Badge className="bg-emerald-500/10 text-emerald-700" variant="secondary">
-                  Connected
+                  <Clock className="w-3 h-3 mr-1" />
+                  Pending
                 </Badge>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Provider fallback</span>
-                <Badge className="bg-blue-500/10 text-blue-700" variant="secondary">
-                  Enabled
-                </Badge>
-              </div>
-              <div className="p-3 rounded-lg bg-muted text-sm text-foreground">
-                Automatic updates cover application approvals, authority-fee receipts, installation progress, and net-metering agreements.
-              </div>
-              <Button
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
-                onClick={() =>
-                  addNotification({
-                    type: "payment",
-                    title: "Payment reminder sent",
-                    message: "Reminder email queued for INV-AUTH-001 before unlocking installation.",
-                    link: "/customer/invoices/INV-AUTH-001",
-                    channel: "email",
-                  })
-                }
-              >
-                Send payment reminder
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full bg-transparent"
-                onClick={() =>
-                  addNotification({
-                    type: "agreement",
-                    title: "Agreement delivered",
-                    message: "Net metering agreement shared with APP-001 customer and installer.",
-                    link: "/customer/applications/APP-001",
-                    channel: "email",
-                  })
-                }
-              >
-                Trigger agreement email
-              </Button>
-            </CardContent>
-          </Card>
+              ),
+            }))}
+          />
+
+          <ActivityCard
+            title="Upcoming Site Visits"
+            items={upcomingVisits.map((v) => ({
+              id: v.id,
+              title: v.customerName,
+              subtitle: v.siteVisitDate,
+            }))}
+          />
         </div>
 
         {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Quick Actions</CardTitle>
+            <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Link href="/officer/applications?status=pending" className="block">
-                <div className="p-4 rounded-lg border border-border hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-center">
-                  <FileText className="w-8 h-8 mx-auto text-blue-500 mb-2" />
-                  <p className="text-sm font-medium text-foreground">Review Applications</p>
-                </div>
+              <Link href="/officer/applications">
+                <Button variant="outline" className="w-full">
+                  Review Applications
+                </Button>
               </Link>
-              <Link href="/officer/installers?status=pending" className="block">
-                <div className="p-4 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-colors text-center">
-                  <Building className="w-8 h-8 mx-auto text-amber-500 mb-2" />
-                  <p className="text-sm font-medium text-foreground">Verify Installers</p>
-                </div>
+              <Link href="/officer/installers">
+                <Button variant="outline" className="w-full">
+                  Verify Installers
+                </Button>
               </Link>
-              <Link href="/officer/payments" className="block">
-                <div className="p-4 rounded-lg border border-border hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors text-center">
-                  <Receipt className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
-                  <p className="text-sm font-medium text-foreground">Verify Payments</p>
-                </div>
+              <Link href="/officer/payments">
+                <Button variant="outline" className="w-full">
+                  Verify Payments
+                </Button>
               </Link>
-              <Link href="/officer/billing" className="block">
-                <div className="p-4 rounded-lg border border-border hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-colors text-center">
-                  <TrendingUp className="w-8 h-8 mx-auto text-cyan-500 mb-2" />
-                  <p className="text-sm font-medium text-foreground">Generate Bills</p>
-                </div>
+              <Link href="/officer/billing">
+                <Button variant="outline" className="w-full">
+                  Generate Bills
+                </Button>
               </Link>
             </div>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: number
+  icon: React.ElementType
+  tone: "amber" | "blue" | "cyan" | "emerald"
+}) {
+  const tones: Record<string, string> = {
+    amber: "border-amber-500/20 bg-amber-500/5 text-amber-600",
+    blue: "border-blue-500/20 bg-blue-500/5 text-blue-600",
+    cyan: "border-cyan-500/20 bg-cyan-500/5 text-cyan-600",
+    emerald: "border-emerald-500/20 bg-emerald-500/5 text-emerald-600",
+  }
+
+  return (
+    <Card className={tones[tone]}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <Icon className="w-5 h-5" />
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-3xl font-bold">{value}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActivityCard({
+  title,
+  items,
+}: {
+  title: string
+  items: {
+    id: string
+    title: string
+    subtitle?: string
+    badge?: React.ReactNode
+  }[]
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No items</p>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between p-3 rounded-lg border border-border"
+            >
+              <div>
+                <p className="font-medium text-sm">{item.title}</p>
+                {item.subtitle && (
+                  <p className="text-xs text-muted-foreground">
+                    {item.subtitle}
+                  </p>
+                )}
+              </div>
+              {item.badge}
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   )
 }
