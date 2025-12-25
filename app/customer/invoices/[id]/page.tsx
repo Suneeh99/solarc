@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,47 +8,87 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Download, CreditCard, Building2, Calendar } from "lucide-react"
 import Link from "next/link"
-
-const invoiceData = {
-  id: "INV-001",
-  type: "installation",
-  status: "pending",
-  createdAt: "2024-01-15",
-  dueDate: "2024-01-30",
-  installer: {
-    name: "SunPower Lanka",
-    address: "45 Solar Avenue, Colombo 03",
-    phone: "+94 11 234 5678",
-    email: "billing@sunpowerlanka.lk",
-    regNumber: "REG-2024-001",
-  },
-  customer: {
-    name: "John Smith",
-    address: "123 Solar Lane, Colombo 07",
-    phone: "+94 77 123 4567",
-    accountNumber: "0712345678",
-  },
-  application: {
-    id: "APP-001",
-    capacity: "5 kW",
-  },
-  items: [
-    { description: "Solar Panels - Jinko Tiger Neo N-type (10 units)", quantity: 10, unitPrice: 65000, total: 650000 },
-    { description: "Inverter - Huawei SUN2000-5KTL", quantity: 1, unitPrice: 180000, total: 180000 },
-    { description: "Mounting Structure & Hardware", quantity: 1, unitPrice: 120000, total: 120000 },
-    { description: "Wiring & Electrical Components", quantity: 1, unitPrice: 85000, total: 85000 },
-    { description: "Installation Labor", quantity: 1, unitPrice: 150000, total: 150000 },
-    { description: "CEB Grid Connection Fee", quantity: 1, unitPrice: 15000, total: 15000 },
-  ],
-  subtotal: 1200000,
-  tax: 50000,
-  total: 1250000,
-  payments: [{ date: "2024-01-16", amount: 500000, method: "Bank Transfer", reference: "TRF-20240116-001" }],
-  balanceDue: 750000,
-}
+import { Invoice, MonthlyBill, PaymentTransaction } from "@/lib/prisma-types"
 
 export default function InvoiceDetailPage() {
   const params = useParams()
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [payments, setPayments] = useState<PaymentTransaction[]>([])
+  const [monthlyBill, setMonthlyBill] = useState<MonthlyBill | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchInvoice = async () => {
+      try {
+        const response = await fetch(`/api/invoices/${params.id}`)
+        if (!response.ok) throw new Error("Invoice not found")
+        const data = await response.json()
+        setInvoice(data.invoice)
+        setPayments(data.payments ?? [])
+        setMonthlyBill(data.monthlyBill ?? null)
+      } catch (err) {
+        console.error(err)
+        setError("Unable to load invoice details")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchInvoice()
+  }, [params.id])
+
+  const paymentTotal = useMemo(
+    () => payments.filter((p) => p.status === "succeeded" || p.status === "verified").reduce((sum, p) => sum + p.amount, 0),
+    [payments],
+  )
+
+  const balanceDue = useMemo(() => {
+    if (!invoice) return 0
+    return invoice.amount - paymentTotal
+  }, [invoice, paymentTotal])
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/customer/invoices">
+                <Button variant="ghost" size="icon" className="bg-transparent">
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">Loading...</h1>
+                <p className="text-muted-foreground">Fetching invoice details</p>
+              </div>
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-6 text-muted-foreground">Loading invoice data...</CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (!invoice) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-3xl mx-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <Link href="/customer/invoices">
+              <Button variant="ghost" size="icon" className="bg-transparent">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-bold text-foreground">Invoice not found</h1>
+          </div>
+          {error && <p className="text-sm text-red-600 bg-red-500/10 p-3 rounded">{error}</p>}
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
@@ -61,21 +102,21 @@ export default function InvoiceDetailPage() {
             </Link>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-foreground">{params.id}</h1>
+                <h1 className="text-2xl font-bold text-foreground">{invoice.id}</h1>
                 <Badge
                   className={
-                    invoiceData.status === "paid"
+                    invoice.status === "paid"
                       ? "bg-emerald-500/10 text-emerald-600"
-                      : invoiceData.status === "pending"
+                      : invoice.status === "pending"
                         ? "bg-amber-500/10 text-amber-600"
                         : "bg-red-500/10 text-red-600"
                   }
                   variant="secondary"
                 >
-                  {invoiceData.status === "paid" ? "Paid" : invoiceData.status === "pending" ? "Pending" : "Overdue"}
+                  {invoice.status === "paid" ? "Paid" : invoice.status === "pending" ? "Pending" : "Overdue"}
                 </Badge>
               </div>
-              <p className="text-muted-foreground">Installation Invoice</p>
+              <p className="text-muted-foreground">{invoice.type === "monthly_bill" ? "Monthly Bill" : "Payment Invoice"}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -83,7 +124,7 @@ export default function InvoiceDetailPage() {
               <Download className="w-4 h-4 mr-2" />
               Download PDF
             </Button>
-            {invoiceData.balanceDue > 0 && (
+            {balanceDue > 0 && (
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <CreditCard className="w-4 h-4 mr-2" />
                 Pay Now
@@ -103,10 +144,10 @@ export default function InvoiceDetailPage() {
                   <Building2 className="w-5 h-5 text-emerald-500" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">{invoiceData.installer.name}</p>
-                  <p className="text-sm text-muted-foreground">{invoiceData.installer.address}</p>
-                  <p className="text-sm text-muted-foreground">{invoiceData.installer.phone}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Reg: {invoiceData.installer.regNumber}</p>
+                  <p className="font-semibold text-foreground">Solar Utility</p>
+                  <p className="text-sm text-muted-foreground">123 Solar Avenue, Colombo</p>
+                  <p className="text-sm text-muted-foreground">+94 11 234 5678</p>
+                  <p className="text-xs text-muted-foreground mt-1">Invoice Type: {invoice.type}</p>
                 </div>
               </div>
             </CardContent>
@@ -118,10 +159,9 @@ export default function InvoiceDetailPage() {
             </CardHeader>
             <CardContent>
               <div>
-                <p className="font-semibold text-foreground">{invoiceData.customer.name}</p>
-                <p className="text-sm text-muted-foreground">{invoiceData.customer.address}</p>
-                <p className="text-sm text-muted-foreground">{invoiceData.customer.phone}</p>
-                <p className="text-xs text-muted-foreground mt-1">Account: {invoiceData.customer.accountNumber}</p>
+                <p className="font-semibold text-foreground">{invoice.customerId}</p>
+                <p className="text-sm text-muted-foreground">Application: {invoice.applicationId ?? "N/A"}</p>
+                <p className="text-xs text-muted-foreground mt-1">Invoice ID: {invoice.id}</p>
               </div>
             </CardContent>
           </Card>
@@ -132,16 +172,16 @@ export default function InvoiceDetailPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-foreground">Invoice Details</CardTitle>
-                <CardDescription>Application {invoiceData.application.id}</CardDescription>
+                <CardDescription>Application {invoice.applicationId ?? "N/A"}</CardDescription>
               </div>
               <div className="text-right text-sm">
                 <p className="text-muted-foreground">
                   <Calendar className="w-3 h-3 inline mr-1" />
-                  Issued: {invoiceData.createdAt}
+                  Issued: {new Date(invoice.createdAt).toLocaleDateString()}
                 </p>
                 <p className="text-muted-foreground">
                   <Calendar className="w-3 h-3 inline mr-1" />
-                  Due: {invoiceData.dueDate}
+                  Due: {new Date(invoice.dueDate).toLocaleDateString()}
                 </p>
               </div>
             </div>
@@ -158,38 +198,24 @@ export default function InvoiceDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoiceData.items.map((item, index) => (
-                    <tr key={index} className="border-b border-border">
-                      <td className="py-3 text-foreground">{item.description}</td>
-                      <td className="py-3 text-center text-foreground">{item.quantity}</td>
-                      <td className="py-3 text-right text-foreground">LKR {item.unitPrice.toLocaleString()}</td>
-                      <td className="py-3 text-right font-medium text-foreground">LKR {item.total.toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {(invoice.lineItems ?? [{ description: invoice.description, quantity: 1, unitPrice: invoice.amount, total: invoice.amount }]).map(
+                    (item, index) => (
+                      <tr key={index} className="border-b border-border">
+                        <td className="py-3 text-foreground">{item.description}</td>
+                        <td className="py-3 text-center text-foreground">{item.quantity}</td>
+                        <td className="py-3 text-right text-foreground">LKR {item.unitPrice.toLocaleString()}</td>
+                        <td className="py-3 text-right font-medium text-foreground">LKR {item.total.toLocaleString()}</td>
+                      </tr>
+                    ),
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="border-b border-border">
-                    <td colSpan={3} className="py-3 text-right text-muted-foreground">
-                      Subtotal
-                    </td>
-                    <td className="py-3 text-right font-medium text-foreground">
-                      LKR {invoiceData.subtotal.toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-border">
-                    <td colSpan={3} className="py-3 text-right text-muted-foreground">
-                      Tax
-                    </td>
-                    <td className="py-3 text-right font-medium text-foreground">
-                      LKR {invoiceData.tax.toLocaleString()}
-                    </td>
-                  </tr>
                   <tr>
                     <td colSpan={3} className="py-3 text-right font-semibold text-foreground">
                       Total
                     </td>
                     <td className="py-3 text-right text-xl font-bold text-emerald-500">
-                      LKR {invoiceData.total.toLocaleString()}
+                      LKR {invoice.amount.toLocaleString()}
                     </td>
                   </tr>
                 </tfoot>
@@ -198,29 +224,60 @@ export default function InvoiceDetailPage() {
           </CardContent>
         </Card>
 
-        {invoiceData.payments.length > 0 && (
+        {payments.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Payment History</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {invoiceData.payments.map((payment, index) => (
+                {payments.map((payment, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
-                      <p className="font-medium text-foreground">{payment.method}</p>
-                      <p className="text-sm text-muted-foreground">Ref: {payment.reference}</p>
+                      <p className="font-medium text-foreground">{payment.paymentMethod ?? "Online"}</p>
+                      <p className="text-sm text-muted-foreground">Ref: {payment.reference ?? payment.id}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-emerald-500">LKR {payment.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">{payment.date}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(payment.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                 ))}
               </div>
               <div className="mt-4 p-4 bg-amber-500/10 rounded-lg flex items-center justify-between">
                 <p className="font-medium text-foreground">Balance Due</p>
-                <p className="text-xl font-bold text-amber-600">LKR {invoiceData.balanceDue.toLocaleString()}</p>
+                <p className="text-xl font-bold text-amber-600">LKR {balanceDue.toLocaleString()}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {monthlyBill && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Monthly Bill Details</CardTitle>
+              <CardDescription>
+                {new Date(2000, monthlyBill.month - 1, 1).toLocaleString("default", { month: "long" })} {monthlyBill.year}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground text-sm">kWh Generated</p>
+                <p className="text-xl font-semibold text-foreground">{monthlyBill.kwhGenerated}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground text-sm">kWh Exported</p>
+                <p className="text-xl font-semibold text-emerald-500">{monthlyBill.kwhExported}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground text-sm">kWh Imported</p>
+                <p className="text-xl font-semibold text-amber-500">{monthlyBill.kwhImported}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground text-sm">Net Amount</p>
+                <p className={`text-xl font-semibold ${monthlyBill.netAmount < 0 ? "text-emerald-500" : "text-foreground"}`}>
+                  Rs. {Math.abs(monthlyBill.netAmount).toLocaleString()}
+                </p>
               </div>
             </CardContent>
           </Card>

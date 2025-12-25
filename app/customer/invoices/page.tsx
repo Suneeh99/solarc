@@ -1,61 +1,82 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Receipt, Clock, CheckCircle, AlertCircle, Download, CreditCard } from "lucide-react"
-
-const demoInvoices = [
-  {
-    id: "INV-001",
-    type: "authority_fee",
-    description: "CEB Authority Fee",
-    amount: 25000,
-    status: "pending",
-    createdAt: "2024-01-20",
-    dueDate: "2024-02-03",
-  },
-  {
-    id: "INV-002",
-    type: "installation",
-    description: "Solar Installation - Solar Pro Ltd",
-    amount: 450000,
-    status: "paid",
-    createdAt: "2024-01-15",
-    dueDate: "2024-01-22",
-    paidAt: "2024-01-18",
-  },
-]
-
-const demoMonthlyBills = [
-  {
-    id: "BILL-001",
-    month: "January",
-    year: 2024,
-    kwhGenerated: 420,
-    kwhExported: 280,
-    kwhImported: 120,
-    amount: -3200,
-    status: "paid",
-  },
-  {
-    id: "BILL-002",
-    month: "December",
-    year: 2023,
-    kwhGenerated: 380,
-    kwhExported: 240,
-    kwhImported: 150,
-    amount: -2100,
-    status: "paid",
-  },
-]
+import { Invoice, MonthlyBill } from "@/lib/prisma-types"
 
 export default function CustomerInvoices() {
-  const [invoices] = useState(demoInvoices)
-  const [monthlyBills] = useState(demoMonthlyBills)
+  const customerId = "CUST-001"
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [monthlyBills, setMonthlyBills] = useState<(MonthlyBill & { invoice?: Invoice | null })[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/invoices?customerId=${customerId}&includeMonthly=true`)
+        if (!response.ok) throw new Error("Unable to load invoices")
+        const data = await response.json()
+        setInvoices(data.invoices ?? [])
+        setMonthlyBills(data.monthlyBills ?? [])
+      } catch (err) {
+        console.error(err)
+        setError("Failed to load invoices")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchInvoices()
+  }, [])
+
+  const pendingTotal = useMemo(
+    () => invoices.filter((inv) => inv.status === "pending").reduce((sum, inv) => sum + inv.amount, 0),
+    [invoices],
+  )
+  const paidTotal = useMemo(
+    () => invoices.filter((inv) => inv.status === "paid").reduce((sum, inv) => sum + inv.amount, 0),
+    [invoices],
+  )
+  const netCredit = useMemo(
+    () =>
+      monthlyBills
+        .map((bill) => bill.netAmount ?? bill.invoice?.amount ?? 0)
+        .filter((amount) => amount < 0)
+        .reduce((sum, amt) => sum + amt, 0),
+    [monthlyBills],
+  )
+
+  const handleCreatePayment = async (invoice: Invoice) => {
+    setPaymentMessage(null)
+    try {
+      const response = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: invoice.amount,
+          customerId,
+          applicationId: invoice.applicationId,
+          invoiceId: invoice.id,
+          type: invoice.type,
+          description: invoice.description,
+          paymentMethod: "online",
+        }),
+      })
+      if (!response.ok) throw new Error("Failed to create payment")
+      const data = await response.json()
+      setPaymentMessage(`Payment intent created. Client secret: ${data.clientSecret}`)
+    } catch (err) {
+      console.error(err)
+      setError("Unable to start payment")
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -85,6 +106,21 @@ export default function CustomerInvoices() {
     }
   }
 
+  const formatMonth = (month: number) => new Date(2000, month - 1, 1).toLocaleString("default", { month: "long" })
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <h1 className="text-2xl font-bold text-foreground">Invoices & Bills</h1>
+          <Card>
+            <CardContent className="p-6 text-muted-foreground">Loading invoices...</CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -93,6 +129,9 @@ export default function CustomerInvoices() {
           <h1 className="text-2xl font-bold text-foreground">Invoices & Bills</h1>
           <p className="text-muted-foreground">View and manage your payments and monthly energy bills</p>
         </div>
+
+        {error && <p className="text-sm text-red-600 bg-red-500/10 p-3 rounded">{error}</p>}
+        {paymentMessage && <p className="text-sm text-emerald-700 bg-emerald-500/10 p-3 rounded">{paymentMessage}</p>}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -104,7 +143,7 @@ export default function CustomerInvoices() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold text-foreground">Rs. 25,000</p>
+                  <p className="text-2xl font-bold text-foreground">Rs. {pendingTotal.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -117,7 +156,7 @@ export default function CustomerInvoices() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Paid</p>
-                  <p className="text-2xl font-bold text-foreground">Rs. 450,000</p>
+                  <p className="text-2xl font-bold text-foreground">Rs. {paidTotal.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -130,7 +169,7 @@ export default function CustomerInvoices() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Net Metering Credit</p>
-                  <p className="text-2xl font-bold text-emerald-500">Rs. 5,300</p>
+                  <p className="text-2xl font-bold text-emerald-500">Rs. {Math.abs(netCredit).toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -176,7 +215,10 @@ export default function CustomerInvoices() {
                       <div className="flex items-center gap-4">
                         <p className="text-lg font-bold text-foreground">Rs. {invoice.amount.toLocaleString()}</p>
                         {invoice.status === "pending" ? (
-                          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                          <Button
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                            onClick={() => handleCreatePayment(invoice)}
+                          >
                             <CreditCard className="w-4 h-4 mr-2" />
                             Pay Now
                           </Button>
@@ -207,12 +249,17 @@ export default function CustomerInvoices() {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4">
                         <div className="flex items-center gap-2 mb-2 sm:mb-0">
                           <p className="font-semibold text-foreground">
-                            {bill.month} {bill.year}
+                            {formatMonth(bill.month)} {bill.year}
                           </p>
-                          {getStatusBadge(bill.status)}
+                          {getStatusBadge(bill.invoice?.status ?? "paid")}
                         </div>
-                        <p className={`text-lg font-bold ${bill.amount < 0 ? "text-emerald-500" : "text-foreground"}`}>
-                          {bill.amount < 0 ? "Credit: " : ""}Rs. {Math.abs(bill.amount).toLocaleString()}
+                        <p
+                          className={`text-lg font-bold ${
+                            bill.netAmount < 0 || (bill.invoice?.amount ?? 0) < 0 ? "text-emerald-500" : "text-foreground"
+                          }`}
+                        >
+                          {bill.netAmount < 0 || (bill.invoice?.amount ?? 0) < 0 ? "Credit: " : ""}
+                          Rs. {Math.abs(bill.netAmount ?? bill.invoice?.amount ?? 0).toLocaleString()}
                         </p>
                       </div>
                       <div className="grid grid-cols-3 gap-4 text-sm">

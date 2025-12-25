@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum PaymentType {
+  authority_fee
+  installation
+  inspection
+  monthly_bill
+}
+
+enum PaymentStatus {
+  requires_action
+  pending_review
+  succeeded
+  verified
+  rejected
+  cancelled
+}
+
+enum InvoiceStatus {
+  pending
+  paid
+  overdue
+}
+
+enum InvoiceType {
+  authority_fee
+  installation
+  monthly_bill
+}
+
+enum MeterReadingStatus {
+  pending
+  verified
+}
+
+model Invoice {
+  id          String              @id @default(cuid())
+  applicationId String?
+  customerId  String
+  type        InvoiceType
+  description String
+  amount      Int
+  status      InvoiceStatus       @default(pending)
+  dueDate     DateTime
+  paidAt      DateTime?
+  lineItems   Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  monthlyBill MonthlyBill?
+  payments    PaymentTransaction[]
+}
+
+model PaymentTransaction {
+  id               String        @id @default(cuid())
+  applicationId    String?
+  customerId       String
+  invoiceId        String?
+  invoice          Invoice?      @relation(fields: [invoiceId], references: [id])
+  type             PaymentType
+  amount           Int
+  currency         String        @default("lkr")
+  status           PaymentStatus @default(requires_action)
+  provider         String        @default("stripe")
+  providerIntentId String?
+  clientSecret     String?
+  reference        String?
+  paymentMethod    String?
+  notes            String?
+  receiptUrl       String?
+  metadata         Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model MonthlyBill {
+  id            String   @id @default(cuid())
+  invoiceId     String   @unique
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+  customerId    String
+  applicationId String?
+  month         Int
+  year          Int
+  kwhGenerated  Int
+  kwhExported   Int
+  kwhImported   Int
+  netAmount     Int
+  createdAt     DateTime @default(now())
+}
+
+model MeterReading {
+  id             String             @id @default(cuid())
+  customerId     String
+  applicationId  String?
+  month          Int
+  year           Int
+  readingDate    DateTime
+  unitsConsumed  Int
+  unitsGenerated Int
+  netUnits       Int
+  status         MeterReadingStatus @default(pending)
+  notes          String?
+  createdAt      DateTime           @default(now())
+}

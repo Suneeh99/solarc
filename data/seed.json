@@ -1,0 +1,227 @@
+{
+  "invoices": [
+    {
+      "id": "INV-001",
+      "applicationId": "APP-001",
+      "customerId": "CUST-001",
+      "type": "authority_fee",
+      "description": "CEB Authority Fee",
+      "amount": 25000,
+      "status": "pending",
+      "dueDate": "2024-02-03T00:00:00.000Z",
+      "paidAt": null,
+      "lineItems": [
+        { "description": "Application Review & Approval", "quantity": 1, "unitPrice": 25000, "total": 25000 }
+      ],
+      "createdAt": "2024-01-20T00:00:00.000Z",
+      "updatedAt": "2024-01-20T00:00:00.000Z"
+    },
+    {
+      "id": "INV-002",
+      "applicationId": "APP-002",
+      "customerId": "CUST-002",
+      "type": "installation",
+      "description": "Solar Installation - Solar Pro Ltd",
+      "amount": 450000,
+      "status": "paid",
+      "dueDate": "2024-01-22T00:00:00.000Z",
+      "paidAt": "2024-01-18T00:00:00.000Z",
+      "lineItems": [
+        { "description": "Solar Panels - Jinko Tiger Neo N-type (10 units)", "quantity": 10, "unitPrice": 65000, "total": 650000 },
+        { "description": "Inverter - Huawei SUN2000-5KTL", "quantity": 1, "unitPrice": 180000, "total": 180000 },
+        { "description": "Mounting Structure & Hardware", "quantity": 1, "unitPrice": 120000, "total": 120000 },
+        { "description": "Wiring & Electrical Components", "quantity": 1, "unitPrice": 85000, "total": 85000 },
+        { "description": "Installation Labor", "quantity": 1, "unitPrice": 150000, "total": 150000 },
+        { "description": "CEB Grid Connection Fee", "quantity": 1, "unitPrice": 15000, "total": 15000 }
+      ],
+      "createdAt": "2024-01-15T00:00:00.000Z",
+      "updatedAt": "2024-01-18T00:00:00.000Z"
+    },
+    {
+      "id": "INV-003",
+      "applicationId": "APP-001",
+      "customerId": "CUST-001",
+      "type": "monthly_bill",
+      "description": "January Net Metering Bill",
+      "amount": -3200,
+      "status": "paid",
+      "dueDate": "2024-02-05T00:00:00.000Z",
+      "paidAt": "2024-02-08T00:00:00.000Z",
+      "lineItems": [
+        { "description": "Net export credit", "quantity": 1, "unitPrice": -3200, "total": -3200 }
+      ],
+      "createdAt": "2024-02-01T00:00:00.000Z",
+      "updatedAt": "2024-02-08T00:00:00.000Z"
+    },
+    {
+      "id": "INV-004",
+      "applicationId": "APP-001",
+      "customerId": "CUST-001",
+      "type": "monthly_bill",
+      "description": "December Net Metering Bill",
+      "amount": -2100,
+      "status": "paid",
+      "dueDate": "2024-01-05T00:00:00.000Z",
+      "paidAt": "2024-01-10T00:00:00.000Z",
+      "lineItems": [
+        { "description": "Net export credit", "quantity": 1, "unitPrice": -2100, "total": -2100 }
+      ],
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-10T00:00:00.000Z"
+    }
+  ],
+  "payments": [
+    {
+      "id": "PAY-001",
+      "applicationId": "APP-001",
+      "customerId": "CUST-001",
+      "invoiceId": "INV-001",
+      "type": "authority_fee",
+      "amount": 25000,
+      "currency": "lkr",
+      "status": "pending_review",
+      "provider": "stripe",
+      "providerIntentId": "pi_test_001",
+      "clientSecret": "cs_test_001",
+      "reference": "BT2024012001",
+      "paymentMethod": "bank_transfer",
+      "notes": "",
+      "receiptUrl": "/receipts/pay-001.pdf",
+      "metadata": { "customerName": "John Silva" },
+      "createdAt": "2024-01-20T00:00:00.000Z",
+      "updatedAt": "2024-01-20T00:00:00.000Z"
+    },
+    {
+      "id": "PAY-002",
+      "applicationId": "APP-002",
+      "customerId": "CUST-002",
+      "invoiceId": "INV-002",
+      "type": "installation",
+      "amount": 450000,
+      "currency": "lkr",
+      "status": "succeeded",
+      "provider": "stripe",
+      "providerIntentId": "pi_test_002",
+      "clientSecret": "cs_test_002",
+      "reference": "OP2024012002",
+      "paymentMethod": "online",
+      "notes": "",
+      "receiptUrl": "/receipts/pay-002.pdf",
+      "metadata": { "customerName": "Maria Fernando" },
+      "createdAt": "2024-01-18T00:00:00.000Z",
+      "updatedAt": "2024-01-18T00:00:00.000Z"
+    },
+    {
+      "id": "PAY-003",
+      "applicationId": "APP-003",
+      "customerId": "CUST-003",
+      "invoiceId": null,
+      "type": "inspection",
+      "amount": 2500,
+      "currency": "lkr",
+      "status": "requires_action",
+      "provider": "stripe",
+      "providerIntentId": "pi_test_003",
+      "clientSecret": "cs_test_003",
+      "reference": "OP2024012003",
+      "paymentMethod": "online",
+      "notes": "",
+      "receiptUrl": null,
+      "metadata": { "customerName": "David Perera" },
+      "createdAt": "2024-01-18T00:00:00.000Z",
+      "updatedAt": "2024-01-18T00:00:00.000Z"
+    },
+    {
+      "id": "PAY-004",
+      "applicationId": "APP-004",
+      "customerId": "CUST-004",
+      "invoiceId": "INV-001",
+      "type": "authority_fee",
+      "amount": 25000,
+      "currency": "lkr",
+      "status": "rejected",
+      "provider": "stripe",
+      "providerIntentId": "pi_test_004",
+      "clientSecret": "cs_test_004",
+      "reference": "CASH2024012004",
+      "paymentMethod": "cash",
+      "notes": "Receipt image unclear, please resubmit",
+      "receiptUrl": null,
+      "metadata": { "customerName": "Lisa Jayawardena" },
+      "createdAt": "2024-01-17T00:00:00.000Z",
+      "updatedAt": "2024-01-20T00:00:00.000Z"
+    }
+  ],
+  "monthlyBills": [
+    {
+      "id": "BILL-001",
+      "invoiceId": "INV-003",
+      "customerId": "CUST-001",
+      "applicationId": "APP-001",
+      "month": 1,
+      "year": 2024,
+      "kwhGenerated": 420,
+      "kwhExported": 280,
+      "kwhImported": 120,
+      "netAmount": -3200,
+      "createdAt": "2024-02-01T00:00:00.000Z"
+    },
+    {
+      "id": "BILL-002",
+      "invoiceId": "INV-004",
+      "customerId": "CUST-001",
+      "applicationId": "APP-001",
+      "month": 12,
+      "year": 2023,
+      "kwhGenerated": 380,
+      "kwhExported": 240,
+      "kwhImported": 150,
+      "netAmount": -2100,
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "meterReadings": [
+    {
+      "id": "MR-001",
+      "customerId": "CUST-001",
+      "applicationId": "APP-001",
+      "month": 1,
+      "year": 2024,
+      "readingDate": "2024-01-15T00:00:00.000Z",
+      "unitsConsumed": 370,
+      "unitsGenerated": 420,
+      "netUnits": -50,
+      "status": "verified",
+      "notes": "Self reported, spot checked",
+      "createdAt": "2024-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "MR-002",
+      "customerId": "CUST-002",
+      "applicationId": "APP-002",
+      "month": 1,
+      "year": 2024,
+      "readingDate": "2024-01-15T00:00:00.000Z",
+      "unitsConsumed": 380,
+      "unitsGenerated": 350,
+      "netUnits": 30,
+      "status": "pending",
+      "notes": null,
+      "createdAt": "2024-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "MR-003",
+      "customerId": "CUST-001",
+      "applicationId": "APP-001",
+      "month": 12,
+      "year": 2023,
+      "readingDate": "2023-12-15T00:00:00.000Z",
+      "unitsConsumed": 350,
+      "unitsGenerated": 480,
+      "netUnits": -130,
+      "status": "verified",
+      "notes": null,
+      "createdAt": "2023-12-15T00:00:00.000Z"
+    }
+  ]
+}

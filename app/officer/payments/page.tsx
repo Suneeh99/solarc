@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,93 +18,73 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Search, CheckCircle, XCircle, Clock, CreditCard, Banknote } from "lucide-react"
+import { PaymentTransaction, PaymentStatus } from "@/lib/prisma-types"
 
-interface Payment {
-  id: string
-  customerId: string
-  customerName: string
-  applicationId: string
-  type: "application_fee" | "installation" | "inspection"
-  amount: number
-  paymentMethod: string
-  referenceNo: string
-  submittedAt: string
-  status: "pending" | "verified" | "rejected"
-  receiptUrl?: string
-  notes?: string
-}
-
-const demoPayments: Payment[] = [
-  {
-    id: "PAY-001",
-    customerId: "CUST-001",
-    customerName: "John Silva",
-    applicationId: "APP-001",
-    type: "application_fee",
-    amount: 5000,
-    paymentMethod: "Bank Transfer",
-    referenceNo: "BT2024012001",
-    submittedAt: "2024-01-20",
-    status: "pending",
-    receiptUrl: "/receipts/pay-001.pdf",
-  },
-  {
-    id: "PAY-002",
-    customerId: "CUST-002",
-    customerName: "Maria Fernando",
-    applicationId: "APP-002",
-    type: "installation",
-    amount: 850000,
-    paymentMethod: "Bank Transfer",
-    referenceNo: "BT2024012002",
-    submittedAt: "2024-01-19",
-    status: "pending",
-  },
-  {
-    id: "PAY-003",
-    customerId: "CUST-003",
-    customerName: "David Perera",
-    applicationId: "APP-003",
-    type: "inspection",
-    amount: 2500,
-    paymentMethod: "Online Payment",
-    referenceNo: "OP2024012003",
-    submittedAt: "2024-01-18",
-    status: "verified",
-  },
-  {
-    id: "PAY-004",
-    customerId: "CUST-004",
-    customerName: "Lisa Jayawardena",
-    applicationId: "APP-004",
-    type: "application_fee",
-    amount: 5000,
-    paymentMethod: "Cash",
-    referenceNo: "CASH2024012004",
-    submittedAt: "2024-01-17",
-    status: "rejected",
-    notes: "Receipt image unclear, please resubmit",
-  },
-]
+type Payment = PaymentTransaction & { customerName?: string }
 
 export default function OfficerPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>(demoPayments)
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectionReason, setRejectionReason] = useState("")
 
-  const pendingPayments = payments.filter((p) => p.status === "pending")
-  const verifiedPayments = payments.filter((p) => p.status === "verified")
-  const rejectedPayments = payments.filter((p) => p.status === "rejected")
+  const pendingPayments = useMemo(
+    () => payments.filter((p) => p.status === "pending_review" || p.status === "requires_action"),
+    [payments],
+  )
+  const verifiedPayments = useMemo(
+    () => payments.filter((p) => p.status === "verified" || p.status === "succeeded"),
+    [payments],
+  )
+  const rejectedPayments = useMemo(() => payments.filter((p) => p.status === "rejected"), [payments])
 
   const totalPending = pendingPayments.reduce((sum, p) => sum + p.amount, 0)
   const totalVerified = verifiedPayments.reduce((sum, p) => sum + p.amount, 0)
 
-  const handleVerify = () => {
+  useEffect(() => {
+    const fetchPayments = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch("/api/payments")
+        if (!response.ok) {
+          throw new Error("Unable to load payments")
+        }
+        const data = await response.json()
+        setPayments(data.transactions ?? [])
+      } catch (err) {
+        console.error(err)
+        setError("Failed to load payments")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPayments()
+  }, [])
+
+  const updatePayment = async (status: PaymentStatus, notes?: string) => {
+    if (!selectedPayment) return
+    const response = await fetch(`/api/payments/${selectedPayment.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, notes }),
+    })
+    if (!response.ok) {
+      setError("Failed to update payment")
+      return
+    }
+    const data = await response.json()
+    if (data.payment) {
+      setPayments(payments.map((p) => (p.id === data.payment.id ? data.payment : p)))
+    }
+  }
+
+  const handleVerify = async () => {
     if (selectedPayment) {
-      setPayments(payments.map((p) => (p.id === selectedPayment.id ? { ...p, status: "verified" } : p)))
+      await updatePayment("verified")
       setVerifyDialogOpen(false)
       setSelectedPayment(null)
     }
@@ -112,9 +92,7 @@ export default function OfficerPaymentsPage() {
 
   const handleReject = () => {
     if (selectedPayment) {
-      setPayments(
-        payments.map((p) => (p.id === selectedPayment.id ? { ...p, status: "rejected", notes: rejectionReason } : p)),
-      )
+      updatePayment("rejected", rejectionReason)
       setRejectDialogOpen(false)
       setSelectedPayment(null)
       setRejectionReason("")
@@ -123,28 +101,36 @@ export default function OfficerPaymentsPage() {
 
   const getTypeLabel = (type: Payment["type"]) => {
     const labels = {
-      application_fee: "Application Fee",
+      authority_fee: "Authority Fee",
       installation: "Installation Payment",
       inspection: "Inspection Fee",
+      monthly_bill: "Monthly Bill",
     }
-    return labels[type]
+    return labels[type] ?? type
   }
 
   const getTypeColor = (type: Payment["type"]) => {
     const colors = {
-      application_fee: "bg-blue-500/10 text-blue-600",
+      authority_fee: "bg-blue-500/10 text-blue-600",
       installation: "bg-emerald-500/10 text-emerald-600",
       inspection: "bg-amber-500/10 text-amber-600",
+      monthly_bill: "bg-purple-500/10 text-purple-600",
     }
-    return colors[type]
+    return colors[type] ?? "bg-muted text-foreground"
+  }
+
+  const formatDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleDateString()
   }
 
   const filteredPayments = (list: Payment[]) =>
     list.filter(
       (p) =>
-        p.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.customerName ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()),
+        (p.reference ?? "").toLowerCase().includes(searchTerm.toLowerCase()),
     )
 
   const PaymentCard = ({ payment }: { payment: Payment }) => (
@@ -157,12 +143,12 @@ export default function OfficerPaymentsPage() {
               {getTypeLabel(payment.type)}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{payment.customerName}</p>
-          <p className="text-xs text-muted-foreground">App: {payment.applicationId}</p>
+          <p className="text-sm text-muted-foreground">{payment.customerName ?? payment.customerId}</p>
+          <p className="text-xs text-muted-foreground">App: {payment.applicationId ?? "—"}</p>
         </div>
         <div className="text-right shrink-0">
           <p className="text-lg font-bold text-emerald-600">LKR {payment.amount.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">{payment.paymentMethod}</p>
+          <p className="text-xs text-muted-foreground">{payment.paymentMethod ?? "Unspecified"}</p>
         </div>
       </div>
 
@@ -170,10 +156,10 @@ export default function OfficerPaymentsPage() {
         <div className="flex items-center justify-between">
           <div className="text-sm">
             <span className="text-muted-foreground">Ref: </span>
-            <span className="text-foreground font-mono">{payment.referenceNo}</span>
+            <span className="text-foreground font-mono">{payment.reference ?? "N/A"}</span>
           </div>
           <div className="flex items-center gap-2">
-            {payment.status === "pending" && (
+            {(payment.status === "pending_review" || payment.status === "requires_action") && (
               <>
                 <Button
                   size="sm"
@@ -201,7 +187,7 @@ export default function OfficerPaymentsPage() {
                 </Button>
               </>
             )}
-            {payment.status === "verified" && (
+            {(payment.status === "verified" || payment.status === "succeeded") && (
               <Badge className="bg-emerald-500/10 text-emerald-600">
                 <CheckCircle className="w-3 h-3 mr-1" />
                 Verified
@@ -220,6 +206,19 @@ export default function OfficerPaymentsPage() {
     </div>
   )
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold text-foreground">Payment Verification</h1>
+          <Card>
+            <CardContent className="p-6 text-muted-foreground">Loading payments...</CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -227,6 +226,8 @@ export default function OfficerPaymentsPage() {
           <h1 className="text-2xl font-bold text-foreground">Payment Verification</h1>
           <p className="text-muted-foreground">Review and verify customer payment submissions</p>
         </div>
+
+        {error && <p className="text-sm text-red-600 bg-red-500/10 p-3 rounded">{error}</p>}
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -345,7 +346,11 @@ export default function OfficerPaymentsPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Reference:</span>
-                    <span className="font-mono text-foreground">{selectedPayment.referenceNo}</span>
+                    <span className="font-mono text-foreground">{selectedPayment.reference ?? "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Submitted:</span>
+                    <span className="text-foreground">{formatDate(selectedPayment.createdAt)}</span>
                   </div>
                 </div>
               </div>
