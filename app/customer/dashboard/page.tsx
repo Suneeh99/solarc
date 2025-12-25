@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react"
+import { NotificationFeed } from "@/components/notifications"
 import { getUser, getDemoApplications, type Application } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -197,6 +198,16 @@ export default function CustomerDashboard() {
                 })}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Notifications</CardTitle>
+            <CardDescription>Delivery feed for approvals, payments, and installation progress</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <NotificationFeed limit={4} />
           </CardContent>
         </Card>
 

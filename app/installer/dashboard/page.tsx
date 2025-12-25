@@ -18,6 +18,7 @@ import {
   Plus,
   Clock,
 } from "lucide-react"
+import { NotificationFeed } from "@/components/notifications"
 import { getUser } from "@/lib/auth"
 
 export default function InstallerDashboard() {
@@ -264,6 +265,16 @@ export default function InstallerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Notifications</CardTitle>
+            <CardDescription>Updates on approvals, payments, and installation progress</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <NotificationFeed limit={4} />
+          </CardContent>
+        </Card>
 
         {/* Quick Stats */}
         <Card>

@@ -8,11 +8,13 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { NotificationFeed, useNotifications } from "@/components/notifications"
 import { FileText, Building, Calendar, Receipt, Clock, ArrowRight, Users, TrendingUp, Zap } from "lucide-react"
 import { getUser } from "@/lib/auth"
 
 export default function OfficerDashboard() {
   const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const { addNotification } = useNotifications()
 
   useEffect(() => {
     setUser(getUser())
@@ -266,6 +268,75 @@ export default function OfficerDashboard() {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-foreground">Notification feed</CardTitle>
+                <CardDescription>Approvals, payment reminders, and installation progress updates</CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-muted/60">
+                Live
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              <NotificationFeed limit={4} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Notification & email service</CardTitle>
+              <CardDescription>SMTP + provider delivery to customers and installers</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">SMTP relay</span>
+                <Badge className="bg-emerald-500/10 text-emerald-700" variant="secondary">
+                  Connected
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Provider fallback</span>
+                <Badge className="bg-blue-500/10 text-blue-700" variant="secondary">
+                  Enabled
+                </Badge>
+              </div>
+              <div className="p-3 rounded-lg bg-muted text-sm text-foreground">
+                Automatic updates cover application approvals, authority-fee receipts, installation progress, and net-metering agreements.
+              </div>
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700"
+                onClick={() =>
+                  addNotification({
+                    type: "payment",
+                    title: "Payment reminder sent",
+                    message: "Reminder email queued for INV-AUTH-001 before unlocking installation.",
+                    link: "/customer/invoices/INV-AUTH-001",
+                    channel: "email",
+                  })
+                }
+              >
+                Send payment reminder
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                onClick={() =>
+                  addNotification({
+                    type: "agreement",
+                    title: "Agreement delivered",
+                    message: "Net metering agreement shared with APP-001 customer and installer.",
+                    link: "/customer/applications/APP-001",
+                    channel: "email",
+                  })
+                }
+              >
+                Trigger agreement email
+              </Button>
             </CardContent>
           </Card>
         </div>
