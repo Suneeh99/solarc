@@ -1,320 +1,221 @@
-import type { Application, Bid, BidSession, Installer, Notification } from "./types"
-import { getDemoApplications, getDemoInstallers } from "./seed"
+import { promisify } from "util"
+import { randomUUID, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto"
+import { promises as fs } from "fs"
+import path from "path"
+import type { UserRole } from "@/lib/auth"
 
-const db = {
-  applications: seedApplications(),
-  installers: seedInstallers(),
-  bidSessions: seedBidSessions(),
-  notifications: [] as Notification[],
-}
-syncSessionsWithApplications()
-
-function seedApplications(): Application[] {
-  return getDemoApplications()
-}
-
-function seedInstallers(): Installer[] {
-  return getDemoInstallers()
-}
-
-function seedBidSessions(): BidSession[] {
-  const now = new Date()
-  const twoDays = 1000 * 60 * 60 * 48
-  return [
-    {
-      id: "BID-001",
-      applicationId: "APP-001",
-      customerId: "CUST-001",
-      startedAt: new Date(now.getTime() - 1000 * 60 * 60 * 6).toISOString(),
-      expiresAt: new Date(now.getTime() + twoDays).toISOString(),
-      status: "open",
-      bidType: "open",
-      requirements: "Looking for premium panels and remote monitoring.",
-      maxBudget: 1500000,
-      bids: [
-        {
-          id: "B-001",
-          applicationId: "APP-001",
-          installerId: "INS-001",
-          installerName: "Solar Pro Ltd",
-          price: 1280000,
-          proposal: "Premium 5kW package with Huawei inverter",
-          warranty: "12 years",
-          estimatedDays: 10,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-          status: "pending",
-          packageName: "Premium Solar Package",
-          contact: { email: "bids@solarpro.lk", phone: "+94 11 234 5678" },
-          installerRating: 4.8,
-          completedProjects: 150,
-        },
-        {
-          id: "B-002",
-          applicationId: "APP-001",
-          installerId: "INS-002",
-          installerName: "Green Energy Solutions",
-          price: 1200000,
-          proposal: "Standard 5kW kit with monitoring",
-          warranty: "10 years",
-          estimatedDays: 12,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 60).toISOString(),
-          status: "pending",
-          packageName: "Standard Solar Package",
-          contact: { email: "sales@greenenergy.lk", phone: "+94 11 345 6789" },
-          installerRating: 4.6,
-          completedProjects: 95,
-        },
-      ],
-      applicationDetails: {
-        address: "123 Solar Lane, Colombo 07",
-        capacity: "5 kW",
-      },
-    },
-    {
-      id: "BID-002",
-      applicationId: "APP-004",
-      customerId: "CUST-001",
-      startedAt: new Date(now.getTime() - twoDays).toISOString(),
-      expiresAt: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-      status: "closed",
-      bidType: "specific",
-      requirements: "Need quick turnaround",
-      maxBudget: 1800000,
-      selectedBidId: "B-003",
-      bids: [
-        {
-          id: "B-003",
-          applicationId: "APP-004",
-          installerId: "INS-001",
-          installerName: "Solar Pro Ltd",
-          price: 1650000,
-          proposal: "8kW premium kit with expedited installation",
-          warranty: "12 years",
-          estimatedDays: 8,
-          createdAt: new Date(now.getTime() - twoDays + 1000 * 60 * 60).toISOString(),
-          status: "accepted",
-          packageName: "Enterprise Package",
-          contact: { email: "bids@solarpro.lk", phone: "+94 11 234 5678" },
-          installerRating: 4.8,
-          completedProjects: 150,
-        },
-      ],
-      applicationDetails: {
-        address: "321 Energy Street, Negombo",
-        capacity: "8 kW",
-      },
-    },
-  ]
+export interface StoredUser {
+  id: string
+  role: UserRole
+  email: string
+  name: string
+  passwordHash: string
+  organizationId?: string
+  phone?: string
+  address?: string
+  verified?: boolean
 }
 
-function clone<T>(value: T): T {
+export interface InstallerOrganization {
+  id: string
+  name: string
+  registrationNumber: string
+  email: string
+  phone: string
+  address: string
+  description: string
+  verified: boolean
+}
+
+interface DatabaseSchema {
+  users: StoredUser[]
+  organizations: InstallerOrganization[]
+}
+
+export interface PublicUser extends Omit<StoredUser, "passwordHash"> {}
+
+export class EmailConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "EmailConflictError"
+  }
+}
+
+const dataDir = path.join(process.cwd(), "data")
+const dbPath = path.join(dataDir, "db.json")
+const scrypt = promisify(scryptCallback)
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase()
+}
+
+async function ensureDatabase() {
   try {
-    return structuredClone(value)
-  } catch {
-    return JSON.parse(JSON.stringify(value))
-  }
-}
+    await fs.access(dbPath)
+    return
+  } catch {}
 
-export function getApplications() {
-  return clone(db.applications)
-}
+  await fs.mkdir(dataDir, { recursive: true })
 
-export function getInstallers() {
-  return clone(db.installers)
-}
+  const defaultPasswordHash = await hashPassword("password123")
+  const installerOrgId = randomUUID()
 
-export function listBidSessions(filter?: { customerId?: string }) {
-  applyExpiry()
-  const sessions = db.bidSessions.filter((session) => {
-    if (filter?.customerId && session.customerId !== filter.customerId) return false
-    return true
-  })
-  return clone(sessions)
-}
-
-export function getBidSessionById(id: string) {
-  applyExpiry()
-  const session = db.bidSessions.find((item) => item.id === id)
-  return session ? clone(session) : null
-}
-
-export function createBidSession(options: {
-  applicationId: string
-  customerId: string
-  durationHours?: number
-  requirements?: string
-  maxBudget?: number
-  bidType?: "open" | "specific"
-}) {
-  const application = db.applications.find((app) => app.id === options.applicationId)
-  if (!application) throw new Error("Application not found")
-
-  const now = new Date()
-  const durationMs = (options.durationHours ?? 48) * 60 * 60 * 1000
-
-  const session: BidSession = {
-    id: `BID-${(db.bidSessions.length + 1).toString().padStart(3, "0")}`,
-    applicationId: options.applicationId,
-    customerId: options.customerId,
-    startedAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + durationMs).toISOString(),
-    status: "open",
-    bidType: options.bidType ?? "open",
-    requirements: options.requirements,
-    maxBudget: options.maxBudget,
-    bids: [],
-    applicationDetails: {
-      address: application.siteAddress,
-      capacity: application.systemCapacity,
-    },
+  const seed: DatabaseSchema = {
+    organizations: [
+      {
+        id: installerOrgId,
+        name: "Solar Pro Ltd",
+        registrationNumber: "REG-2024-001",
+        email: "installer@demo.com",
+        phone: "+94 11 234 5678",
+        address: "123 Solar Street, Colombo",
+        description: "Leading solar installation company with 10+ years experience",
+        verified: true,
+      },
+    ],
+    users: [
+      {
+        id: randomUUID(),
+        role: "customer",
+        email: "customer@demo.com",
+        name: "John Customer",
+        passwordHash: defaultPasswordHash,
+        verified: true,
+      },
+      {
+        id: randomUUID(),
+        role: "installer",
+        email: "installer@demo.com",
+        name: "Solar Pro Ltd",
+        passwordHash: defaultPasswordHash,
+        organizationId: installerOrgId,
+        verified: true,
+      },
+      {
+        id: randomUUID(),
+        role: "officer",
+        email: "officer@demo.com",
+        name: "CEB Officer",
+        passwordHash: defaultPasswordHash,
+        verified: true,
+      },
+    ],
   }
 
-  db.bidSessions.unshift(session)
-  application.status = "finding_installer"
-  application.bidId = session.id
-
-  addNotification(application.customerId, `Bid session ${session.id} opened for ${application.id}`)
-
-  return clone(session)
+  await fs.writeFile(dbPath, JSON.stringify(seed, null, 2), "utf8")
 }
 
-export function submitBidProposal(input: {
-  sessionId: string
-  installerId: string
-  installerName: string
-  price: number
-  proposal: string
-  warranty: string
-  estimatedDays: number
-  packageName?: string
-  contact?: Bid["contact"]
-  message?: string
-}) {
-  const session = db.bidSessions.find((item) => item.id === input.sessionId)
-  if (!session) throw new Error("Bid session not found")
-  if (session.status !== "open") throw new Error("Bid session is not open")
+async function readDatabase(): Promise<DatabaseSchema> {
+  await ensureDatabase()
+  const content = await fs.readFile(dbPath, "utf8")
+  return JSON.parse(content) as DatabaseSchema
+}
 
-  const bid: Bid = {
-    id: `B-${(session.bids.length + 1).toString().padStart(3, "0")}`,
-    applicationId: session.applicationId,
-    installerId: input.installerId,
-    installerName: input.installerName,
-    price: input.price,
-    proposal: input.proposal,
-    warranty: input.warranty,
-    estimatedDays: input.estimatedDays,
-    createdAt: new Date().toISOString(),
-    status: "pending",
-    packageName: input.packageName,
-    contact: input.contact,
-    message: input.message,
+async function writeDatabase(data: DatabaseSchema) {
+  await fs.writeFile(dbPath, JSON.stringify(data, null, 2), "utf8")
+}
+
+export async function findUserByEmail(email: string): Promise<StoredUser | undefined> {
+  const db = await readDatabase()
+  return db.users.find((user) => user.email === normalizeEmail(email))
+}
+
+export function toPublicUser(user: StoredUser): PublicUser {
+  const { passwordHash: _passwordHash, ...publicUser } = user
+  return publicUser
+}
+
+async function hashPassword(password: string) {
+  const salt = randomBytes(16)
+  const derivedKey = (await scrypt(password, salt, 64)) as Buffer
+  return `${salt.toString("hex")}:${derivedKey.toString("hex")}`
+}
+
+async function verifyPassword(password: string, storedHash: string) {
+  const [saltHex, keyHex] = storedHash.split(":")
+  if (!saltHex || !keyHex) return false
+
+  const derivedKey = (await scrypt(password, Buffer.from(saltHex, "hex"), 64)) as Buffer
+  return timingSafeEqual(Buffer.from(keyHex, "hex"), derivedKey)
+}
+
+export async function validateUserCredentials(
+  email: string,
+  password: string,
+): Promise<PublicUser | null> {
+  const user = await findUserByEmail(email)
+  if (!user) return null
+
+  const isValid = await verifyPassword(password, user.passwordHash)
+  if (!isValid) return null
+
+  return toPublicUser(user)
+}
+
+export async function findUserById(id: string): Promise<StoredUser | undefined> {
+  const db = await readDatabase()
+  return db.users.find((user) => user.id === id)
+}
+
+export async function getPublicUserById(id: string): Promise<PublicUser | undefined> {
+  const user = await findUserById(id)
+  return user ? toPublicUser(user) : undefined
+}
+
+export async function createUserAccount({
+  role,
+  email,
+  name,
+  password,
+  phone,
+  address,
+  organization,
+  verified,
+}: {
+  role: UserRole
+  email: string
+  name: string
+  password: string
+  phone?: string
+  address?: string
+  organization?: Omit<InstallerOrganization, "id" | "verified"> & { verified?: boolean }
+  verified?: boolean
+}): Promise<{ user: PublicUser; organization?: InstallerOrganization }> {
+  const db = await readDatabase()
+  const normalizedEmail = normalizeEmail(email)
+
+  if (db.users.some((existing) => existing.email === normalizedEmail)) {
+    throw new EmailConflictError("A user with this email already exists.")
   }
 
-  session.bids.push(bid)
-  addNotification(session.customerId, `${input.installerName} submitted a proposal on ${session.id}`)
-  return clone(bid)
-}
+  let organizationId: string | undefined
+  let newOrganization: InstallerOrganization | undefined
 
-export function updateBidDecision(sessionId: string, bidId: string, action: "accept" | "reject") {
-  const session = db.bidSessions.find((item) => item.id === sessionId)
-  if (!session) throw new Error("Bid session not found")
-  if (session.status !== "open") throw new Error("Only open sessions can be updated")
-
-  const bid = session.bids.find((item) => item.id === bidId)
-  if (!bid) throw new Error("Bid not found")
-  if (bid.status !== "pending") throw new Error("Bid is already finalized")
-
-  if (action === "accept") {
-    session.status = "closed"
-    session.selectedBidId = bidId
-    bid.status = "accepted"
-    session.bids.forEach((b) => {
-      if (b.id !== bidId && b.status === "pending") b.status = "rejected"
-    })
-
-    const application = db.applications.find((app) => app.id === session.applicationId)
-    if (application) {
-      application.selectedInstaller = {
-        id: bid.installerId,
-        name: bid.installerName,
-        packageName: bid.packageName ?? "Custom Package",
-        price: bid.price,
-      }
-      application.status = "installation_in_progress"
-      application.bidId = session.id
+  if (organization) {
+    organizationId = randomUUID()
+    newOrganization = {
+      ...organization,
+      id: organizationId,
+      verified: organization.verified ?? false,
     }
-
-    addNotification(session.customerId, `You accepted ${bid.installerName}'s bid on ${session.id}`)
-  } else {
-    bid.status = "rejected"
+    db.organizations.push(newOrganization)
   }
 
-  return clone(session)
-}
+  const passwordHash = await hashPassword(password)
+  const newUser: StoredUser = {
+    id: randomUUID(),
+    role,
+    email: normalizedEmail,
+    name,
+    passwordHash,
+    phone,
+    address,
+    organizationId,
+    verified: role === "installer" ? false : verified ?? true,
+  }
 
-export function expireStaleBids(now = new Date()) {
-  let expiredCount = 0
-  db.bidSessions.forEach((session) => {
-    if (session.status !== "open") return
-    if (new Date(session.expiresAt) > now) return
+  db.users.push(newUser)
+  await writeDatabase(db)
 
-    session.status = "expired"
-    session.bids = session.bids.map((bid) =>
-      bid.status === "pending" ? { ...bid, status: "expired" } : bid,
-    )
-    expiredCount += 1
-
-    const application = db.applications.find((app) => app.id === session.applicationId)
-    if (application) {
-      application.status = "approved"
-      application.bidId = session.id
-    }
-    addNotification(session.customerId, `Bid session ${session.id} expired without approval.`)
-  })
-
-  return { expiredCount, timestamp: now.toISOString() }
-}
-
-export function listNotifications(customerId: string) {
-  return clone(db.notifications.filter((note) => note.customerId === customerId))
-}
-
-function addNotification(customerId: string, message: string, type: Notification["type"] = "info") {
-  db.notifications.push({
-    id: `NT-${(db.notifications.length + 1).toString().padStart(3, "0")}`,
-    customerId,
-    message,
-    createdAt: new Date().toISOString(),
-    type,
-  })
-}
-
-function applyExpiry() {
-  expireStaleBids()
-}
-
-function syncSessionsWithApplications() {
-  db.bidSessions.forEach((session) => {
-    const application = db.applications.find((app) => app.id === session.applicationId)
-    if (!application) return
-
-    if (session.status === "open") {
-      application.status = "finding_installer"
-      application.bidId = session.id
-    }
-
-    if (session.selectedBidId) {
-      const selectedBid = session.bids.find((bid) => bid.id === session.selectedBidId)
-      if (selectedBid) {
-        application.selectedInstaller = {
-          id: selectedBid.installerId,
-          name: selectedBid.installerName,
-          packageName: selectedBid.packageName ?? "Custom Package",
-          price: selectedBid.price,
-        }
-        application.status = session.status === "expired" ? "approved" : "installation_in_progress"
-        application.bidId = session.id
-      }
-    }
-  })
+  return { user: toPublicUser(newUser), organization: newOrganization }
 }

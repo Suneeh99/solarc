@@ -1,18 +1,27 @@
 import { cookies } from "next/headers"
-import { type Session, type User } from "@prisma/client"
 import crypto from "crypto"
 import { prisma } from "./prisma"
+import type { Session, User } from "@prisma/client"
 
 const SESSION_COOKIE = "session_token"
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
-export type SessionWithUser = Session & { user: User & { organization: { id: string; name: string } | null } }
+export type SessionWithUser = Session & {
+  user: User & {
+    organization: { id: string; name: string } | null
+  }
+}
 
-export function serializeUser(user: User & { organization?: { id: string; name: string } | null }) {
+export function serializeUser(
+  user: User & { organization?: { id: string; name: string } | null },
+) {
   const { passwordHash: _passwordHash, ...safeUser } = user
+
   return {
     ...safeUser,
-    organization: user.organization ? { id: user.organization.id, name: user.organization.name } : null,
+    organization: user.organization
+      ? { id: user.organization.id, name: user.organization.name }
+      : null,
   }
 }
 
@@ -24,7 +33,11 @@ export async function getSession(): Promise<SessionWithUser | null> {
     where: { token },
     include: {
       user: {
-        include: { organization: { select: { id: true, name: true } } },
+        include: {
+          organization: {
+            select: { id: true, name: true },
+          },
+        },
       },
     },
   })
@@ -73,9 +86,11 @@ export async function createSession(userId: string) {
 
 export async function clearSession() {
   const token = cookies().get(SESSION_COOKIE)?.value
+
   if (token) {
     await prisma.session.deleteMany({ where: { token } })
   }
+
   cookies().delete(SESSION_COOKIE)
 }
 
