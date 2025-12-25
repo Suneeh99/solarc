@@ -1,13 +1,12 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useAuthSession } from "@/hooks/use-auth-session"
 import {
   Sun,
   FileText,
@@ -21,7 +20,7 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react"
-import { getUser, getDemoApplications, type Application } from "@/lib/auth"
+import { getDemoApplications, type Application } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -44,11 +43,10 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 }
 
 export default function CustomerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const { user } = useAuthSession()
   const [applications, setApplications] = useState<Application[]>([])
 
   useEffect(() => {
-    setUser(getUser())
     // Load demo applications
     const demoApps = getDemoApplications().filter((app) => app.customerId === "CUST-001")
     setApplications(demoApps)
@@ -68,7 +66,9 @@ export default function CustomerDashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name?.split(" ")[0]}</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Welcome back, {user?.name?.split(" ")[0]}
+            </h1>
             <p className="text-muted-foreground">Track your solar installation journey</p>
           </div>
           <Link href="/customer/applications/new">

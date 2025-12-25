@@ -1,22 +1,15 @@
 "use client"
 
-import type React from "react"
-
-import { useEffect, useState } from "react"
+import { useAuthSession } from "@/hooks/use-auth-session"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Building, Calendar, Receipt, Clock, ArrowRight, Users, TrendingUp, Zap } from "lucide-react"
-import { getUser } from "@/lib/auth"
 
 export default function OfficerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
-
-  useEffect(() => {
-    setUser(getUser())
-  }, [])
+  const { user } = useAuthSession()
 
   // Demo stats
   const stats = {

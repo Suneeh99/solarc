@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { z } from "zod"
 import { Sun, Eye, EyeOff, Upload, Building, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,16 +13,20 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { registerSchema } from "@/lib/validations/auth"
+import { useAuthSession } from "@/hooks/use-auth-session"
 
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const defaultRole = searchParams.get("role") || "customer"
+  const { user, status, refresh } = useAuthSession()
 
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState(defaultRole)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   const [customerData, setCustomerData] = useState({
     name: "",
@@ -47,51 +52,87 @@ function RegisterForm() {
     setActiveTab(defaultRole)
   }, [defaultRole])
 
+  useEffect(() => {
+    if (status === "authenticated" && user) {
+      router.replace(`/${user.role}/dashboard`)
+    }
+  }, [router, status, user])
+
   const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
 
-    if (customerData.password !== customerData.confirmPassword) {
-      setError("Passwords do not match")
+    const payload = {
+      role: "customer" as const,
+      name: customerData.name,
+      email: customerData.email,
+      phone: customerData.phone,
+      address: customerData.address,
+      password: customerData.password,
+      confirmPassword: customerData.confirmPassword,
+    }
+
+    const parsed = registerSchema.safeParse(payload)
+    if (!parsed.success) {
+      setError(parsed.error.errors[0]?.message ?? "Please check your details and try again.")
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "customer",
-          email: customerData.email,
-          name: customerData.name,
-        }),
-      )
-      router.push("/customer/dashboard")
-    }, 1000)
+    await submitRegistration(parsed.data)
   }
 
   const handleInstallerSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
 
-    if (installerData.password !== installerData.confirmPassword) {
-      setError("Passwords do not match")
+    const payload = {
+      role: "installer" as const,
+      companyName: installerData.companyName,
+      registrationNumber: installerData.registrationNumber,
+      email: installerData.email,
+      phone: installerData.phone,
+      address: installerData.address,
+      description: installerData.description,
+      password: installerData.password,
+      confirmPassword: installerData.confirmPassword,
+    }
+
+    const parsed = registerSchema.safeParse(payload)
+    if (!parsed.success) {
+      setError(parsed.error.errors[0]?.message ?? "Please check your details and try again.")
       return
     }
 
-    setLoading(true)
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          role: "installer",
-          email: installerData.email,
-          name: installerData.companyName,
-          verified: false,
-        }),
-      )
-      router.push("/installer/dashboard")
-    }, 1000)
+    await submitRegistration(parsed.data)
+  }
+
+  const submitRegistration = async (payload: z.infer<typeof registerSchema>) => {
+    try {
+      setLoading(true)
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error ?? "Unable to create your account right now.")
+        return
+      }
+
+      setSuccess("Account created! Signing you in...")
+
+      await refresh()
+      router.replace(`/${result.user.role}/dashboard`)
+    } catch (err) {
+      console.error("[REGISTER_ERROR]", err)
+      setError("Unexpected error while creating your account. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -123,6 +164,7 @@ function RegisterForm() {
               </TabsList>
 
               {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-4">{error}</div>}
+              {success && <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 text-sm mb-4">{success}</div>}
 
               <TabsContent value="customer">
                 <form onSubmit={handleCustomerSubmit} className="space-y-4">

@@ -32,9 +32,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getUser, logout, type User, type UserRole } from "@/lib/auth"
+import type { UserRole } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { NotificationProvider, NotificationBell } from "@/components/notifications"
+import { useAuthSession } from "@/hooks/use-auth-session"
 
 interface NavItem {
   label: string
@@ -73,19 +74,16 @@ const navigationByRole: Record<UserRole, NavItem[]> = {
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<User | null>(null)
+  const { user, status, refresh } = useAuthSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    const currentUser = getUser()
-    if (!currentUser) {
+    if (status === "unauthenticated") {
       router.push("/login")
-      return
     }
-    setUser(currentUser)
-  }, [router])
+  }, [router, status])
 
-  if (!user) {
+  if (status !== "authenticated" || !user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -209,7 +207,14 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="text-destructive">
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        await fetch("/api/auth/logout", { method: "POST" })
+                        refresh()
+                        router.push("/login")
+                      }}
+                      className="text-destructive"
+                    >
                       <LogOut className="w-4 h-4 mr-2" />
                       Logout
                     </DropdownMenuItem>

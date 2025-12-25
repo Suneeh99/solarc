@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Sun, Eye, EyeOff } from "lucide-react"
@@ -10,9 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { loginSchema } from "@/lib/validations/auth"
+import { useAuthSession } from "@/hooks/use-auth-session"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { user, status, refresh } = useAuthSession()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
@@ -21,31 +24,48 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (status === "authenticated" && user) {
+      router.replace(`/${user.role}/dashboard`)
+    }
+  }, [router, status, user])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
 
-    // Simulate authentication - in production, this would call an API
-    setTimeout(() => {
-      // Demo accounts for testing
-      if (formData.email === "customer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "customer", email: formData.email, name: "John Customer" }))
-        router.push("/customer/dashboard")
-      } else if (formData.email === "installer@demo.com") {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ role: "installer", email: formData.email, name: "Solar Pro Ltd", verified: true }),
-        )
-        router.push("/installer/dashboard")
-      } else if (formData.email === "officer@demo.com") {
-        localStorage.setItem("user", JSON.stringify({ role: "officer", email: formData.email, name: "CEB Officer" }))
-        router.push("/officer/dashboard")
-      } else {
-        setError("Invalid credentials. Try: customer@demo.com, installer@demo.com, or officer@demo.com")
-      }
+    const parsed = loginSchema.safeParse(formData)
+    if (!parsed.success) {
+      setError(parsed.error.errors[0]?.message ?? "Invalid credentials")
       setLoading(false)
-    }, 1000)
+      return
+    }
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error ?? "Unable to sign in with those credentials.")
+        setLoading(false)
+        return
+      }
+
+      await refresh()
+      setLoading(false)
+      router.replace(`/${result.user.role}/dashboard`)
+    } catch (err) {
+      console.error("[LOGIN_ERROR]", err)
+      setError("Unexpected error while signing in. Please try again.")
+      setLoading(false)
+    }
   }
 
   return (
@@ -122,7 +142,7 @@ export default function LoginPage() {
                   <li>Installer: installer@demo.com</li>
                   <li>Officer: officer@demo.com</li>
                 </ul>
-                <p className="mt-2 text-xs">(Any password works for demo)</p>
+                <p className="mt-2 text-xs">Use password: <span className="font-semibold">password123</span></p>
               </div>
             </form>
           </CardContent>

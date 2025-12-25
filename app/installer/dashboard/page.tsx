@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useMemo } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useAuthSession } from "@/hooks/use-auth-session"
 import {
   Package,
   Gavel,
@@ -18,16 +19,12 @@ import {
   Plus,
   Clock,
 } from "lucide-react"
-import { getUser } from "@/lib/auth"
 
 export default function InstallerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const { user } = useAuthSession()
+  const memoizedUser = useMemo(() => user, [user])
 
-  useEffect(() => {
-    setUser(getUser())
-  }, [])
-
-  const isVerified = user?.verified !== false
+  const isVerified = memoizedUser?.verified !== false
 
   // Demo stats
   const stats = {
@@ -86,7 +83,7 @@ export default function InstallerDashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">Welcome back, {memoizedUser?.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge className="bg-emerald-500/10 text-emerald-600" variant="secondary">
                 <CheckCircle className="w-3 h-3 mr-1" />

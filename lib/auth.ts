@@ -1,13 +1,14 @@
 export type UserRole = "customer" | "installer" | "officer"
 
 export interface User {
-  id?: string
+  id: string
   role: UserRole
   email: string
   name: string
   verified?: boolean
   phone?: string
   address?: string
+  organizationId?: string
 }
 
 export interface Application {
@@ -129,22 +130,6 @@ export interface MonthlyBill {
   amount: number
   status: "pending" | "paid"
   createdAt: string
-}
-
-export function getUser(): User | null {
-  if (typeof window === "undefined") return null
-  const userStr = localStorage.getItem("user")
-  if (!userStr) return null
-  try {
-    return JSON.parse(userStr)
-  } catch {
-    return null
-  }
-}
-
-export function logout() {
-  localStorage.removeItem("user")
-  window.location.href = "/login"
 }
 
 // Demo data helpers
