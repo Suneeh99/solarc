@@ -1,6 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@/lib/services/auth"
+import { PaymentType, PaymentStatus } from "@prisma/client"
+import { createSandboxPaymentIntent } from "@/lib/payment-gateway"
+
+export const dynamic = "force-dynamic"
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
 
 function mapInvoice(invoice: any) {
   return {
@@ -17,6 +25,10 @@ function mapInvoice(invoice: any) {
     paidAt: invoice.paidAt,
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* GET /api/payments                                                   */
+/* ------------------------------------------------------------------ */
 
 export async function GET() {
   const user = await currentUser()
@@ -41,7 +53,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.meterReading.findMany({
-      where: user.role === "officer" ? undefined : { userId: user.id },
+      where: user.role === "officer" ? undefined : { application: { customerId: user.id } },
     }),
   ])
 
@@ -56,7 +68,7 @@ export async function GET() {
         (r) =>
           r.applicationId === inv.applicationId &&
           r.year === inv.dueDate.getFullYear() &&
-          r.month === inv.dueDate.getMonth() + 1
+          r.month === inv.dueDate.getMonth() + 1,
       )
 
       return {
@@ -65,9 +77,9 @@ export async function GET() {
         applicationId: inv.application.reference,
         month: inv.dueDate.getMonth() + 1,
         year: inv.dueDate.getFullYear(),
-        kwhGenerated: reading?.kwhGenerated || 0,
-        kwhExported: reading?.kwhExported || 0,
-        kwhImported: reading?.kwhImported || 0,
+        kwhGenerated: reading?.kwhGenerated ?? 0,
+        kwhExported: reading?.kwhExported ?? 0,
+        kwhImported: reading?.kwhImported ?? 0,
         amount: inv.amount,
         status: inv.status,
         createdAt: inv.createdAt,
@@ -77,49 +89,89 @@ export async function GET() {
   return NextResponse.json({ invoices: invoiceList, monthlyBills })
 }
 
-export async function POST(request: Request) {
+/* ------------------------------------------------------------------ */
+/* POST /api/payments                                                  */
+/* Create payment transaction + gateway intent                         */
+/* ------------------------------------------------------------------ */
+
+export async function POST(req: NextRequest) {
   const user = await currentUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (user.role === "installer") {
+  const body = await req.json()
+  const {
+    invoiceId,
+    amount,
+    currency = "lkr",
+    type,
+    description,
+    paymentMethod,
+    reference,
+  }: {
+    invoiceId?: string
+    amount?: number
+    currency?: string
+    type?: PaymentType
+    description?: string
+    paymentMethod?: string
+    reference?: string
+  } = body
+
+  if (!invoiceId || !amount || !type) {
     return NextResponse.json(
-      { error: "Installers cannot create invoices" },
-      { status: 403 }
+      { error: "invoiceId, amount, and type are required" },
+      { status: 400 },
     )
   }
 
-  const body = await request.json()
-  const application = await prisma.application.findFirst({
-    where: { reference: body.applicationId },
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
   })
 
-  if (!application) {
-    return NextResponse.json(
-      { error: "Application not found" },
-      { status: 404 }
-    )
+  if (!invoice) {
+    return NextResponse.json({ error: "Invoice not found" }, { status: 404 })
   }
 
-  const invoice = await prisma.invoice.create({
-    data: {
-      applicationId: application.id,
-      customerId: application.customerId,
-      amount: body.amount,
-      description: body.description,
-      dueDate: new Date(body.dueDate),
-      status: body.status || "pending",
-      type: body.type || "authority_fee",
+  if (user.role === "customer" && invoice.customerId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const intent = createSandboxPaymentIntent({
+    amount,
+    currency,
+    description,
+    metadata: {
+      invoiceId,
+      customerId: invoice.customerId,
+      applicationId: invoice.applicationId,
+      type,
     },
-    include: {
-      application: { select: { reference: true, customerId: true } },
-      customer: { select: { name: true } },
+  })
+
+  const transaction = await prisma.paymentTransaction.create({
+    data: {
+      invoiceId,
+      applicationId: invoice.applicationId,
+      customerId: invoice.customerId,
+      type,
+      amount,
+      currency,
+      status: PaymentStatus.requires_action,
+      provider: "sandbox",
+      providerIntentId: intent.id,
+      clientSecret: intent.clientSecret,
+      paymentMethod: paymentMethod ?? null,
+      reference: reference ?? null,
+      notes: null,
+      receiptUrl: null,
+      metadata: { description },
     },
   })
 
   return NextResponse.json(
-    { invoice: mapInvoice(invoice) },
-    { status: 201 }
+    { transaction, clientSecret: intent.clientSecret },
+    { status: 201 },
   )
 }

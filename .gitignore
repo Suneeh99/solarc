@@ -8,12 +8,18 @@ out
 
 # Local databases
 dev.db
+prisma/dev.db
+data/db.json
 
 # Environment variables
-.env*
 .env
+.env*
 .env.local
 
-# Logs and OS files
+# Logs
+npm-debug.log*
+pnpm-debug.log*
 *.log
+
+# OS files
 .DS_Store
