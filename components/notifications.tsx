@@ -8,12 +8,13 @@ import { cn } from "@/lib/utils"
 
 export interface Notification {
   id: string
-  type: "success" | "warning" | "info" | "application" | "payment" | "installation" | "bid"
+  type: "success" | "warning" | "info" | "application" | "payment" | "installation" | "bid" | "billing" | "agreement"
   title: string
   message: string
   timestamp: string
   read: boolean
   link?: string
+  channel?: "in_app" | "email" | "sms"
 }
 
 interface NotificationContextType {
@@ -30,48 +31,67 @@ const NotificationContext = createContext<NotificationContextType | null>(null)
 const demoNotifications: Notification[] = [
   {
     id: "1",
-    type: "application",
-    title: "Application Approved",
-    message: "Your solar installation application APP-001 has been approved.",
-    timestamp: "2024-01-20T10:30:00",
+    type: "payment",
+    title: "Authority fee receipt received",
+    message: "PAY-AUTH-001 submitted for APP-001. Officer review pending.",
+    timestamp: "2024-03-02T10:30:00",
     read: false,
-    link: "/customer/applications/APP-001",
+    link: "/officer/payments",
+    channel: "in_app",
   },
   {
     id: "2",
-    type: "bid",
-    title: "New Bid Received",
-    message: "SunPower Systems has submitted a bid for your project.",
-    timestamp: "2024-01-20T09:15:00",
+    type: "billing",
+    title: "Monthly bill generated",
+    message: "January 2024 bill created from MR-001 with LKR 3,200 credit.",
+    timestamp: "2024-03-01T09:15:00",
     read: false,
-    link: "/customer/bids/BID-001",
+    link: "/customer/invoices/INV-BILL-2024-01",
+    channel: "email",
   },
   {
     id: "3",
-    type: "payment",
-    title: "Payment Verified",
-    message: "Your application fee payment has been verified.",
-    timestamp: "2024-01-19T16:45:00",
+    type: "installation",
+    title: "Installation unlocked",
+    message: "Authority-fee receipt approved. Installer can start on INST-003.",
+    timestamp: "2024-03-01T16:45:00",
     read: true,
+    link: "/installer/orders",
+    channel: "in_app",
   },
   {
     id: "4",
-    type: "installation",
-    title: "Installation Started",
-    message: "Your solar panel installation has begun at your property.",
-    timestamp: "2024-01-19T08:00:00",
+    type: "agreement",
+    title: "Agreement ready to sign",
+    message: "Net metering agreement for APP-001 is ready for customer signature.",
+    timestamp: "2024-02-28T08:00:00",
     read: true,
+    link: "/customer/applications/APP-001",
+    channel: "email",
   },
   {
     id: "5",
     type: "info",
     title: "Site Visit Scheduled",
-    message: "A CEB officer will visit your property on Jan 25, 2024 at 10:00 AM.",
-    timestamp: "2024-01-18T14:30:00",
+    message: "A CEB officer will visit your property on Mar 05, 2024 at 10:00 AM.",
+    timestamp: "2024-02-27T14:30:00",
     read: true,
     link: "/customer/applications/APP-001",
+    channel: "in_app",
   },
 ]
+
+function formatTime(timestamp: string) {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) return `${days}d ago`
+  if (hours > 0) return `${hours}h ago`
+  return "Just now"
+}
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>(demoNotifications)
@@ -129,20 +149,10 @@ export function NotificationPanel({ open, onClose }: { open: boolean; onClose: (
       payment: <Receipt className="w-5 h-5 text-emerald-500" />,
       installation: <Zap className="w-5 h-5 text-amber-500" />,
       bid: <Calendar className="w-5 h-5 text-blue-500" />,
+      billing: <CreditPill label="Billing" />,
+      agreement: <FileText className="w-5 h-5 text-purple-500" />,
     }
-    return icons[type]
-  }
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    const days = Math.floor(hours / 24)
-
-    if (days > 0) return `${days}d ago`
-    if (hours > 0) return `${hours}h ago`
-    return "Just now"
+    return icons[type] || icons.info
   }
 
   if (!open) return null
@@ -214,7 +224,14 @@ export function NotificationPanel({ open, onClose }: { open: boolean; onClose: (
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{notification.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{formatTime(notification.timestamp)}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {notification.channel && (
+                        <Badge variant="outline" className="text-[10px] h-5 px-2 bg-muted/50">
+                          {notification.channel === "email" ? "Email" : notification.channel === "sms" ? "SMS" : "In-app"}
+                        </Badge>
+                      )}
+                      <p className="text-xs text-muted-foreground">{formatTime(notification.timestamp)}</p>
+                    </div>
                   </div>
                   {!notification.read && <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-2" />}
                 </div>
@@ -243,5 +260,53 @@ export function NotificationBell() {
       </Button>
       <NotificationPanel open={open} onClose={() => setOpen(false)} />
     </>
+  )
+}
+
+function CreditPill({ label }: { label: string }) {
+  return (
+    <div className="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-700 text-[10px] font-semibold leading-none">
+      {label}
+    </div>
+  )
+}
+
+export function NotificationFeed({ limit = 5 }: { limit?: number }) {
+  const { notifications } = useNotifications()
+  const items = notifications.slice(0, limit)
+
+  return (
+    <div className="space-y-3">
+      {items.map((notification) => (
+        <div key={notification.id} className="p-3 rounded-lg border border-border bg-card">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {notification.type === "billing" ? (
+                <CreditPill label="Billing" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                  {notification.type === "payment" ? <Receipt className="w-4 h-4 text-emerald-600" /> : null}
+                  {notification.type === "installation" ? <Zap className="w-4 h-4 text-amber-500" /> : null}
+                  {notification.type === "agreement" ? <FileText className="w-4 h-4 text-purple-500" /> : null}
+                  {notification.type === "application" ? <FileText className="w-4 h-4 text-cyan-500" /> : null}
+                  {notification.type === "info" ? <Info className="w-4 h-4 text-blue-500" /> : null}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{formatTime(notification.timestamp)}</p>
+          </div>
+          <p className="text-sm font-semibold text-foreground mt-1">{notification.title}</p>
+          <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
+          {notification.channel && (
+            <div className="mt-2">
+              <Badge variant="outline" className="text-[10px] h-5 px-2 bg-muted/60">
+                {notification.channel === "email" ? "Email delivery" : notification.channel === "sms" ? "SMS" : "In-app"}
+              </Badge>
+            </div>
+          )}
+        </div>
+      ))}
+      {items.length === 0 && <p className="text-muted-foreground text-sm">No notifications yet</p>}
+    </div>
   )
 }

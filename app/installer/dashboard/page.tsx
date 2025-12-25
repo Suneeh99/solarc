@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
 import {
   Card,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+
 import {
   Package,
   Gavel,
@@ -20,10 +22,9 @@ import {
   Star,
   AlertTriangle,
   CheckCircle,
-  ArrowRight,
   Plus,
-  Clock,
 } from "lucide-react"
+
 import {
   fetchApplications,
   fetchBidSessions,
@@ -41,8 +42,8 @@ export default function InstallerDashboard() {
   const [installerProfile, setInstallerProfile] = useState<Installer | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [bidSessions, setBidSessions] = useState<BidSession[]>([])
-  const [loading, setLoading] = useState(true)
   const [revenue, setRevenue] = useState(0)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -59,17 +60,18 @@ export default function InstallerDashboard() {
 
         if (currentUser?.organization) {
           const profile = installerList.find(
-            (inst) => inst.id === currentUser.organization?.id
+            (inst) => inst.id === currentUser.organization?.id,
           )
           setInstallerProfile(profile ?? null)
         }
 
         setApplications(apps)
         setBidSessions(bids)
+
         setRevenue(
           payments.invoices
             .filter((inv) => inv.status === "paid")
-            .reduce((sum, inv) => sum + inv.amount, 0)
+            .reduce((sum, inv) => sum + inv.amount, 0),
         )
       } finally {
         setLoading(false)
@@ -83,11 +85,13 @@ export default function InstallerDashboard() {
 
   const stats = useMemo(() => {
     const activePackages = installerProfile?.packages.length ?? 0
-    const pendingOrders = applications.filter(
-      (app) =>
-        app.status === "finding_installer" ||
-        app.status === "installation_in_progress" ||
-        app.status === "installation_complete"
+
+    const pendingOrders = applications.filter((app) =>
+      [
+        "finding_installer",
+        "installation_in_progress",
+        "installation_complete",
+      ].includes(app.status),
     ).length
 
     return {
@@ -100,21 +104,6 @@ export default function InstallerDashboard() {
       totalRevenue: revenue,
     }
   }, [applications, bidSessions, installerProfile, revenue])
-
-  const recentBids = bidSessions.slice(0, 3).map((session) => ({
-    id: session.id,
-    customerName: session.customerId,
-    location: session.applicationId,
-    capacity: session.bids[0]?.proposal || "",
-    deadline: session.expiresAt,
-  }))
-
-  const recentOrders = applications.slice(0, 2).map((app) => ({
-    id: app.id,
-    customerName: app.customerName,
-    status: app.status,
-    amount: app.invoices?.[0]?.amount ?? 0,
-  }))
 
   if (loading) {
     return (
@@ -138,10 +127,10 @@ export default function InstallerDashboard() {
               <h2 className="text-xl font-bold text-foreground mb-2">
                 Verification Pending
               </h2>
-              <p className="text-muted-foreground mb-6">
-                Your company registration is under review by CEB officers.
-                Once verified, you will be able to create packages, bid on
-                customer requests, and receive installation orders.
+              <p className="text-muted-foreground">
+                Your company registration is under review. Once verified, you can
+                publish packages, bid on applications, and receive installation
+                orders.
               </p>
             </CardContent>
           </Card>
@@ -153,6 +142,7 @@ export default function InstallerDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
@@ -172,6 +162,7 @@ export default function InstallerDashboard() {
               </div>
             </div>
           </div>
+
           <Link href="/installer/packages/new">
             <Button className="bg-amber-500 hover:bg-amber-600 text-white">
               <Plus className="w-4 h-4 mr-2" />
@@ -180,41 +171,44 @@ export default function InstallerDashboard() {
           </Link>
         </div>
 
+        {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground">Active Packages</p>
-              <p className="text-2xl font-bold text-foreground">
-                {stats.activePackages}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground">Open Bids</p>
-              <p className="text-2xl font-bold text-foreground">
-                {stats.openBids}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground">Pending Orders</p>
-              <p className="text-2xl font-bold text-foreground">
-                {stats.pendingOrders}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold text-foreground">
-                Rs. {(stats.totalRevenue / 1_000_000).toFixed(1)}M
-              </p>
-            </CardContent>
-          </Card>
+          <StatCard label="Active Packages" value={stats.activePackages} icon={Package} />
+          <StatCard label="Open Bids" value={stats.openBids} icon={Gavel} />
+          <StatCard label="Pending Orders" value={stats.pendingOrders} icon={ClipboardList} />
+          <StatCard
+            label="Total Revenue"
+            value={`Rs. ${(stats.totalRevenue / 1_000_000).toFixed(1)}M`}
+            icon={TrendingUp}
+          />
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string | number
+  icon: React.ElementType
+}) {
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+            <Icon className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold text-foreground">{value}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

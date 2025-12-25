@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Zap, Search, CheckCircle, Clock, TrendingUp, TrendingDown } from "lucide-react"
+import { Zap, Search, CheckCircle, Clock, TrendingUp, TrendingDown, FileText, Download } from "lucide-react"
+import { getDemoMonthlyBills, getDemoInvoices } from "@/lib/auth"
 
 const meterReadings = [
   {
@@ -58,6 +60,10 @@ export default function OfficerMeterReadings() {
   const [selectedReading, setSelectedReading] = useState<(typeof meterReadings)[0] | null>(null)
   const [showVerifyDialog, setShowVerifyDialog] = useState(false)
   const [verificationNotes, setVerificationNotes] = useState("")
+  const monthlyBills = getDemoMonthlyBills()
+  const invoices = getDemoInvoices()
+  const billPreview = selectedReading ? monthlyBills.find((bill) => bill.meterReadingId === selectedReading.id) : null
+  const billInvoice = billPreview ? invoices.find((invoice) => invoice.id === billPreview.invoiceId) : null
 
   const filteredReadings = meterReadings.filter(
     (r) =>
@@ -247,6 +253,39 @@ export default function OfficerMeterReadings() {
                     <p className="text-lg font-bold text-emerald-500">{selectedReading.unitsGenerated} kWh</p>
                   </div>
                 </div>
+                {billPreview && (
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-emerald-700">Billing outcome</p>
+                      <Badge className="bg-emerald-600 text-white" variant="secondary">
+                        {billPreview.status === "paid" ? "Credit issued" : "Invoice queued"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Monthly bill</span>
+                      <span className="font-semibold text-foreground">{billPreview.id}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Amount</span>
+                      <span className={billPreview.amount < 0 ? "text-emerald-600 font-semibold" : "text-foreground font-semibold"}>
+                        {billPreview.amount < 0 ? "+" : ""}LKR {Math.abs(billPreview.amount).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      {billPreview.invoiceId && (
+                        <Link href={`/customer/invoices/${billPreview.invoiceId}`} className="text-emerald-700 hover:underline">
+                          View invoice {billPreview.invoiceId}
+                        </Link>
+                      )}
+                      {billInvoice?.pdfUrl && (
+                        <a href={billInvoice.pdfUrl} download className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                          <Download className="w-4 h-4" />
+                          Download PDF
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
                     Verification Notes (Optional)

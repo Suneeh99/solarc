@@ -1,30 +1,27 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+
 import {
   FileText,
   Building,
   Calendar,
   Receipt,
   Clock,
-  ArrowRight,
-  Users,
-  TrendingUp,
-  Zap,
 } from "lucide-react"
+
 import {
   fetchApplications,
   fetchCurrentUser,
@@ -47,85 +44,63 @@ export default function OfficerDashboard() {
 
   useEffect(() => {
     async function load() {
-      const currentUser = await fetchCurrentUser()
-      setUser(currentUser)
+      try {
+        const currentUser = await fetchCurrentUser()
+        setUser(currentUser)
 
-      const [apps, installersData, payments, userList] = await Promise.all([
-        fetchApplications(),
-        fetchInstallers(false),
-        fetchPayments(),
-        fetchUsers(),
-      ])
+        const [apps, installerList, payments, userList] = await Promise.all([
+          fetchApplications(),
+          fetchInstallers(false),
+          fetchPayments(),
+          fetchUsers(),
+        ])
 
-      setApplications(apps)
-      setInstallers(installersData)
-      setInvoices(payments.invoices)
-      setUsers(userList)
-      setLoading(false)
+        setApplications(apps)
+        setInstallers(installerList)
+        setInvoices(payments.invoices)
+        setUsers(userList)
+      } finally {
+        setLoading(false)
+      }
     }
 
     load()
   }, [])
 
   const stats = useMemo(() => {
-    const pendingApplications = applications.filter(
-      (app) => app.status === "pending"
-    ).length
-
-    const pendingInstallerVerifications = installers.filter(
-      (inst) => !inst.verified
-    ).length
-
-    const scheduledSiteVisits = applications.filter(
-      (app) => app.siteVisitDate
-    ).length
-
-    const pendingPayments = invoices.filter(
-      (inv) => inv.status === "pending"
-    ).length
-
-    const activeInstallations = applications.filter((app) =>
-      [
-        "installation_in_progress",
-        "installation_complete",
-        "final_inspection",
-      ].includes(app.status)
-    ).length
-
-    const totalCustomers = users.filter(
-      (u) => u.role === "customer"
-    ).length
-
-    const totalInstallers = installers.filter(
-      (inst) => inst.verified
-    ).length
-
-    const totalCapacityMW =
-      applications.reduce((sum, app) => {
-        const capacity = parseFloat(
-          (app.selectedInstaller?.packageName || "").replace(/\D+/g, "")
-        )
-        return sum + (Number.isNaN(capacity) ? 0 : capacity / 1000)
-      }, 0) || applications.length * 0.003
-
     return {
-      pendingApplications,
-      pendingInstallerVerifications,
-      scheduledSiteVisits,
-      pendingPayments,
-      activeInstallations,
-      totalCustomers,
-      totalInstallers,
-      totalCapacityMW: Number(totalCapacityMW.toFixed(2)),
+      pendingApplications: applications.filter(
+        (a) => a.status === "pending",
+      ).length,
+
+      pendingInstallerVerifications: installers.filter(
+        (i) => !i.verified,
+      ).length,
+
+      scheduledSiteVisits: applications.filter(
+        (a) => Boolean(a.siteVisitDate),
+      ).length,
+
+      pendingPayments: invoices.filter(
+        (i) => i.status === "pending",
+      ).length,
+
+      totalCustomers: users.filter(
+        (u) => u.role === "customer",
+      ).length,
+
+      totalVerifiedInstallers: installers.filter(
+        (i) => i.verified,
+      ).length,
     }
   }, [applications, installers, invoices, users])
 
   const recentApplications = applications.slice(0, 3)
-  const pendingVerifications = installers
-    .filter((inst) => !inst.verified)
+  const pendingInstallers = installers
+    .filter((i) => !i.verified)
     .slice(0, 3)
-  const upcomingSiteVisits = applications
-    .filter((app) => app.siteVisitDate)
+  const upcomingVisits = applications
+    .filter((a) => a.siteVisitDate)
     .slice(0, 3)
 
   if (loading) {
@@ -139,34 +114,29 @@ export default function OfficerDashboard() {
   }
 
   const getStatusBadge = (status: string) => {
-    const config: Record<
+    const map: Record<
       string,
-      { label: string; color: string; icon: React.ElementType }
+      { label: string; className: string }
     > = {
       pending: {
         label: "Pending",
-        color: "bg-amber-500/10 text-amber-600",
-        icon: Clock,
+        className: "bg-amber-500/10 text-amber-600",
       },
       under_review: {
         label: "Under Review",
-        color: "bg-blue-500/10 text-blue-600",
-        icon: FileText,
+        className: "bg-blue-500/10 text-blue-600",
       },
       site_visit_scheduled: {
         label: "Site Visit",
-        color: "bg-cyan-500/10 text-cyan-600",
-        icon: Calendar,
+        className: "bg-cyan-500/10 text-cyan-600",
       },
     }
 
-    const { label, color, icon: Icon } =
-      config[status] || config.pending
-
+    const cfg = map[status] ?? map.pending
     return (
-      <Badge className={color} variant="secondary">
-        <Icon className="w-3 h-3 mr-1" />
-        {label}
+      <Badge variant="secondary" className={cfg.className}>
+        <Clock className="w-3 h-3 mr-1" />
+        {cfg.label}
       </Badge>
     )
   }
@@ -174,146 +144,86 @@ export default function OfficerDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground">
             Officer Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Welcome back, {user?.name}. Here is your overview.
+            Welcome back, {user?.name}
           </p>
         </div>
 
-        {/* Quick Stats */}
+        {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-amber-500/20 bg-amber-500/5">
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Pending Applications
-              </p>
-              <p className="text-3xl font-bold text-amber-500">
-                {stats.pendingApplications}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-blue-500/20 bg-blue-500/5">
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Installer Verifications
-              </p>
-              <p className="text-3xl font-bold text-blue-500">
-                {stats.pendingInstallerVerifications}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-cyan-500/20 bg-cyan-500/5">
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Site Visits Scheduled
-              </p>
-              <p className="text-3xl font-bold text-cyan-500">
-                {stats.scheduledSiteVisits}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-emerald-500/20 bg-emerald-500/5">
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Pending Payments
-              </p>
-              <p className="text-3xl font-bold text-emerald-500">
-                {stats.pendingPayments}
-              </p>
-            </CardContent>
-          </Card>
+          <StatCard
+            label="Pending Applications"
+            value={stats.pendingApplications}
+            icon={FileText}
+            tone="amber"
+          />
+          <StatCard
+            label="Installer Verifications"
+            value={stats.pendingInstallerVerifications}
+            icon={Building}
+            tone="blue"
+          />
+          <StatCard
+            label="Site Visits"
+            value={stats.scheduledSiteVisits}
+            icon={Calendar}
+            tone="cyan"
+          />
+          <StatCard
+            label="Pending Payments"
+            value={stats.pendingPayments}
+            icon={Receipt}
+            tone="emerald"
+          />
         </div>
 
         {/* Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base text-foreground">
-                Recent Applications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {recentApplications.map((app) => (
-                <div
-                  key={app.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border"
-                >
-                  <div>
-                    <p className="font-medium text-sm text-foreground">
-                      {app.customerName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {app.id}
-                    </p>
-                  </div>
-                  {getStatusBadge(app.status)}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <ActivityCard
+            title="Recent Applications"
+            items={recentApplications.map((a) => ({
+              id: a.id,
+              title: a.customerName,
+              badge: getStatusBadge(a.status),
+            }))}
+          />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base text-foreground">
-                Installer Verifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {pendingVerifications.map((installer) => (
-                <div
-                  key={installer.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border"
+          <ActivityCard
+            title="Installer Verifications"
+            items={pendingInstallers.map((i) => ({
+              id: i.id,
+              title: i.companyName,
+              badge: (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-500/10 text-amber-600"
                 >
-                  <p className="font-medium text-sm text-foreground">
-                    {installer.companyName}
-                  </p>
-                  <Badge
-                    className="bg-amber-500/10 text-amber-600"
-                    variant="secondary"
-                  >
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pending
-                  </Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                  <Clock className="w-3 h-3 mr-1" />
+                  Pending
+                </Badge>
+              ),
+            }))}
+          />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base text-foreground">
-                Upcoming Site Visits
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {upcomingSiteVisits.map((visit) => (
-                <div
-                  key={visit.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border"
-                >
-                  <p className="font-medium text-sm text-foreground">
-                    {visit.customerName}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {visit.siteVisitDate}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <ActivityCard
+            title="Upcoming Site Visits"
+            items={upcomingVisits.map((v) => ({
+              id: v.id,
+              title: v.customerName,
+              subtitle: v.siteVisitDate,
+            }))}
+          />
         </div>
 
+        {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">
-              Quick Actions
-            </CardTitle>
+            <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -342,5 +252,83 @@ export default function OfficerDashboard() {
         </Card>
       </div>
     </DashboardLayout>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: number
+  icon: React.ElementType
+  tone: "amber" | "blue" | "cyan" | "emerald"
+}) {
+  const tones: Record<string, string> = {
+    amber: "border-amber-500/20 bg-amber-500/5 text-amber-600",
+    blue: "border-blue-500/20 bg-blue-500/5 text-blue-600",
+    cyan: "border-cyan-500/20 bg-cyan-500/5 text-cyan-600",
+    emerald: "border-emerald-500/20 bg-emerald-500/5 text-emerald-600",
+  }
+
+  return (
+    <Card className={tones[tone]}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <Icon className="w-5 h-5" />
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-3xl font-bold">{value}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActivityCard({
+  title,
+  items,
+}: {
+  title: string
+  items: {
+    id: string
+    title: string
+    subtitle?: string
+    badge?: React.ReactNode
+  }[]
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No items</p>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between p-3 rounded-lg border border-border"
+            >
+              <div>
+                <p className="font-medium text-sm">{item.title}</p>
+                {item.subtitle && (
+                  <p className="text-xs text-muted-foreground">
+                    {item.subtitle}
+                  </p>
+                )}
+              </div>
+              {item.badge}
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   )
 }
