@@ -1,30 +1,65 @@
 import { NextResponse } from "next/server"
-import { getBidSessionById, updateBidDecision } from "@/lib/data-store"
+import { prisma } from "@/lib/prisma"
+import { currentUser } from "@/lib/services/auth"
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const session = getBidSessionById(params.id)
-  if (!session) {
-    return NextResponse.json({ error: "Bid session not found" }, { status: 404 })
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const user = await currentUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  return NextResponse.json(session)
-}
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const body = await request.json()
-  const { action, bidId } = body
 
-  if (!action || !bidId) {
-    return NextResponse.json({ error: "action and bidId are required" }, { status: 400 })
-  }
-  if (!["accept", "reject"].includes(action)) {
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  const bid = await prisma.bid.findUnique({
+    where: { id: params.id },
+    include: {
+      application: true,
+      installer: true,
+      organization: true,
+      package: true,
+    },
+  })
+
+  if (!bid) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  try {
-    const session = updateBidDecision(params.id, bidId, action)
-    return NextResponse.json(session)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to update bid decision"
-    return NextResponse.json({ error: message }, { status: 400 })
+  if (user.role === "customer" && bid.application.customerId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const updated = await prisma.bid.update({
+    where: { id: params.id },
+    data: {
+      status: body.status ?? bid.status,
+    },
+    include: {
+      application: true,
+      installer: true,
+      organization: true,
+      package: true,
+    },
+  })
+
+  return NextResponse.json({
+    bid: {
+      id: updated.id,
+      applicationId: updated.application.reference,
+      installerId:
+        updated.organizationId || updated.installerId || "",
+      installerName:
+        updated.organization?.name ||
+        updated.installer?.name ||
+        "Installer",
+      price: updated.price,
+      proposal: updated.proposal,
+      warranty: updated.warranty,
+      estimatedDays: updated.estimatedDays,
+      createdAt: updated.createdAt,
+      status: updated.status,
+    },
+  })
 }

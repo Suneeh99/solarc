@@ -21,7 +21,7 @@ import {
   CreditCard,
   Building,
 } from "lucide-react"
-import { getDemoApplications, type Application } from "@/lib/auth"
+import { fetchApplication, type Application } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -58,20 +58,37 @@ const workflowSteps = [
 export default function ApplicationDetail() {
   const params = useParams()
   const [application, setApplication] = useState<Application | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    const apps = getDemoApplications()
-    const app = apps.find((a) => a.id === params.id)
-    if (app) {
-      setApplication(app)
+    async function load() {
+      try {
+        const app = await fetchApplication(params.id as string)
+        setApplication(app)
+        if (!app) setError("Application not found")
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load application")
+      } finally {
+        setLoading(false)
+      }
     }
+    load()
   }, [params.id])
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading application...</div>
+      </DashboardLayout>
+    )
+  }
 
   if (!application) {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-muted-foreground">Application not found</p>
+          <p className="text-destructive">{error || "Application not found"}</p>
         </div>
       </DashboardLayout>
     )

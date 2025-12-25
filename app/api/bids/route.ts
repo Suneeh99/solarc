@@ -1,33 +1,164 @@
+import { addHours } from "date-fns"
 import { NextResponse } from "next/server"
-import { createBidSession, listBidSessions } from "@/lib/data-store"
+import { prisma } from "@/lib/prisma"
+import { currentUser } from "@/lib/services/auth"
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const customerId = searchParams.get("customerId") ?? undefined
-  const sessions = listBidSessions({ customerId })
-  return NextResponse.json(sessions)
+function mapBid(bid: any, applicationReference: string) {
+  return {
+    id: bid.id,
+    applicationId: applicationReference,
+    installerId: bid.organizationId || bid.installerId || "",
+    installerName:
+      bid.organization?.name ||
+      bid.installer?.name ||
+      "Installer",
+    price: bid.price,
+    proposal: bid.proposal,
+    warranty: bid.warranty,
+    estimatedDays: bid.estimatedDays,
+    createdAt: bid.createdAt,
+    status: bid.status,
+  }
+}
+
+function mapSession(session: any) {
+  return {
+    id: session.id,
+    applicationId: session.application.reference,
+    customerId: session.customerId,
+    startedAt: session.startedAt,
+    expiresAt: session.expiresAt,
+    status: session.status,
+    bids: session.bids.map((bid: any) =>
+      mapBid(bid, session.application.reference)
+    ),
+  }
+}
+
+export async function GET() {
+  const user = await currentUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const sessions = await prisma.bidSession.findMany({
+    where:
+      user.role === "customer"
+        ? { customerId: user.id }
+        : user.role === "installer" && user.organization
+        ? { bids: { some: { organizationId: user.organization.id } } }
+        : undefined,
+    include: {
+      application: true,
+      bids: {
+        include: { installer: true, organization: true, package: true },
+      },
+    },
+    orderBy: { startedAt: "desc" },
+  })
+
+  return NextResponse.json({
+    bidSessions: sessions.map(mapSession),
+  })
 }
 
 export async function POST(request: Request) {
+  const user = await currentUser()
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const body = await request.json()
-  const { applicationId, customerId, durationHours, requirements, maxBudget, bidType } = body
+  const application = await prisma.application.findFirst({
+    where: { reference: body.applicationId },
+  })
 
-  if (!applicationId || !customerId) {
-    return NextResponse.json({ error: "applicationId and customerId are required" }, { status: 400 })
+  if (!application) {
+    return NextResponse.json({ error: "Application not found" }, { status: 404 })
   }
 
-  try {
-    const session = createBidSession({
-      applicationId,
-      customerId,
-      durationHours: durationHours ? Number(durationHours) : undefined,
-      requirements,
-      maxBudget: maxBudget ? Number(maxBudget) : undefined,
-      bidType,
+  if (user.role === "customer") {
+    const session = await prisma.bidSession.upsert({
+      where: { applicationId: application.id },
+      update: {
+        status: "open",
+        expiresAt: addHours(
+          new Date(),
+          Number(body.expiresInDays || 2) * 24
+        ),
+      },
+      create: {
+        applicationId: application.id,
+        customerId: application.customerId,
+        status: "open",
+        startedAt: new Date(),
+        expiresAt: addHours(
+          new Date(),
+          Number(body.expiresInDays || 2) * 24
+        ),
+      },
+      include: {
+        application: true,
+        bids: {
+          include: { installer: true, organization: true, package: true },
+        },
+      },
     })
-    return NextResponse.json(session, { status: 201 })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create bid session"
-    return NextResponse.json({ error: message }, { status: 400 })
+
+    return NextResponse.json(
+      { bidSession: mapSession(session) },
+      { status: 201 }
+    )
   }
+
+  if (user.role !== "installer" || !user.organization) {
+    return NextResponse.json(
+      { error: "Only installers can submit bids" },
+      { status: 403 }
+    )
+  }
+
+  const session =
+    (body.bidSessionId &&
+      (await prisma.bidSession.findUnique({
+        where: { id: body.bidSessionId },
+        include: { application: true, bids: true },
+      }))) ||
+    (await prisma.bidSession.upsert({
+      where: { applicationId: application.id },
+      update: {},
+      create: {
+        applicationId: application.id,
+        customerId: application.customerId,
+        status: "open",
+        startedAt: new Date(),
+        expiresAt: addHours(new Date(), 48),
+      },
+      include: { application: true, bids: true },
+    }))
+
+  const bid = await prisma.bid.create({
+    data: {
+      applicationId: application.id,
+      bidSessionId: session.id,
+      installerId: user.id,
+      organizationId: user.organization.id,
+      packageId: body.packageId,
+      price: body.price,
+      proposal: body.proposal || "Installer proposal",
+      warranty: body.warranty || "Standard warranty",
+      estimatedDays: body.estimatedDays || 7,
+      status: "pending",
+    },
+    include: {
+      installer: true,
+      organization: true,
+      package: true,
+    },
+  })
+
+  return NextResponse.json(
+    { bid: mapBid(bid, application.reference) },
+    { status: 201 }
+  )
 }

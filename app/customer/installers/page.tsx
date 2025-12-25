@@ -8,20 +8,26 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search, Building, Star, CheckCircle, Package, ArrowRight, MapPin, Phone } from "lucide-react"
-import { getDemoInstallers, type Installer } from "@/lib/auth"
+import { fetchInstallers, type Installer } from "@/lib/auth"
 
 export default function CustomerInstallers() {
   const [installers, setInstallers] = useState<Installer[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    console.log("[v0] CustomerInstallers - Loading installers")
-    const allInstallers = getDemoInstallers().filter((i) => i.verified)
-    console.log(
-      "[v0] Filtered verified installers:",
-      allInstallers.map((i) => ({ id: i.id, name: i.companyName, packageCount: i.packages.length })),
-    )
-    setInstallers(allInstallers)
+    async function loadInstallers() {
+      try {
+        const response = await fetchInstallers(true)
+        setInstallers(response)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load installers")
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadInstallers()
   }, [])
 
   const filteredInstallers = installers.filter(
@@ -38,6 +44,7 @@ export default function CustomerInstallers() {
           <h1 className="text-2xl font-bold text-foreground">Find Installer</h1>
           <p className="text-muted-foreground">Browse verified solar installation companies and their packages</p>
         </div>
+        {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
 
         {/* Search */}
         <Card>
@@ -56,7 +63,11 @@ export default function CustomerInstallers() {
 
         {/* Installers List */}
         <div className="space-y-6">
-          {filteredInstallers.length === 0 ? (
+          {loading ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">Loading installers...</CardContent>
+            </Card>
+          ) : filteredInstallers.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <Building className="w-12 h-12 mx-auto text-muted-foreground mb-4" />

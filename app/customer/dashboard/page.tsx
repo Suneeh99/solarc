@@ -21,7 +21,7 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react"
-import { getUser, getDemoApplications, type Application } from "@/lib/auth"
+import { fetchApplications, fetchCurrentUser, type Application, type User } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -44,14 +44,25 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 }
 
 export default function CustomerDashboard() {
-  const [user, setUser] = useState<ReturnType<typeof getUser>>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    setUser(getUser())
-    // Load demo applications
-    const demoApps = getDemoApplications().filter((app) => app.customerId === "CUST-001")
-    setApplications(demoApps)
+    async function load() {
+      try {
+        const currentUser = await fetchCurrentUser()
+        setUser(currentUser)
+        const apps = await fetchApplications()
+        setApplications(currentUser ? apps.filter((app) => app.customerId === currentUser.id) : apps)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load dashboard")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [])
 
   // Demo stats
@@ -62,13 +73,24 @@ export default function CustomerDashboard() {
     systemCapacity: 5, // kW
   }
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading dashboard...</div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name?.split(" ")[0]}</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Welcome back{user ? `, ${user.name.split(" ")[0]}` : ""}
+            </h1>
             <p className="text-muted-foreground">Track your solar installation journey</p>
           </div>
           <Link href="/customer/applications/new">
