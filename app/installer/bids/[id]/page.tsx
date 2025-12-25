@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,58 +8,116 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, MapPin, Zap, Calendar, Clock, Send, Package } from "lucide-react"
+import { ArrowLeft, MapPin, Zap, Calendar, Clock, Send, Package, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
-
-const bidRequest = {
-  id: "BID-003",
-  customerId: "CUST-003",
-  applicationId: "APP-003",
-  address: "789 Beach Road, Galle",
-  capacity: "10 kW",
-  roofType: "Metal Sheet",
-  roofArea: "100 sqm",
-  createdAt: "2024-01-20",
-  expiresAt: "2024-01-27",
-  requirements: "Looking for high-efficiency panels with good warranty coverage.",
-  status: "open",
-}
-
-const availablePackages = [
-  {
-    id: "PKG-001",
-    name: "Premium Solar Package",
-    capacity: "10 kW",
-    price: 2400000,
-    warranty: "10 years",
-    panels: "Jinko Tiger Neo N-type",
-    inverter: "Huawei SUN2000",
-  },
-  {
-    id: "PKG-002",
-    name: "Standard Solar Package",
-    capacity: "10 kW",
-    price: 2150000,
-    warranty: "8 years",
-    panels: "Canadian Solar HiKu6",
-    inverter: "Growatt MIN",
-  },
-]
+import { getDemoInstallers, getUser, type BidSession, type SolarPackage, type User } from "@/lib/auth"
 
 export default function SubmitBidPage() {
   const params = useParams()
   const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<BidSession | null>(null)
   const [selectedPackage, setSelectedPackage] = useState("")
   const [customPrice, setCustomPrice] = useState("")
   const [timeline, setTimeline] = useState("14")
   const [notes, setNotes] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const selectedPkg = availablePackages.find((p) => p.id === selectedPackage)
+  useEffect(() => {
+    setUser(getUser())
+  }, [])
 
-  const handleSubmitBid = () => {
-    const price = customPrice || selectedPkg?.price
-    alert(`Bid submitted successfully! Price: LKR ${Number(price).toLocaleString()}`)
-    router.push("/installer/bids")
+  useEffect(() => {
+    const fetchSession = async () => {
+      setError(null)
+      try {
+        const res = await fetch(`/api/bids/${params.id}`)
+        if (!res.ok) throw new Error("Unable to load bid request")
+        const data = await res.json()
+        setSession(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unexpected error")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSession()
+  }, [params.id])
+
+  const installerPackages = useMemo<SolarPackage[]>(() => {
+    const installer = getDemoInstallers().find((inst) => inst.id === (user?.id ?? "INS-001"))
+    return installer?.packages ?? []
+  }, [user])
+
+  const selectedPkg = installerPackages.find((p) => p.id === selectedPackage)
+
+  const handleSubmitBid = async () => {
+    if (!session || (!customPrice && !selectedPkg?.price)) {
+      setError("Please select a package or enter a price.")
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/bids/${session.id}/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          installerId: user?.id ?? "INS-001",
+          installerName: user?.name ?? "Installer",
+          price: Number(customPrice || selectedPkg?.price),
+          proposal: selectedPkg?.name ?? "Custom bid",
+          warranty: selectedPkg?.warranty ?? "Standard warranty",
+          estimatedDays: Number(timeline),
+          packageName: selectedPkg?.name,
+          contact: { email: user?.email, phone: "N/A" },
+          message: notes,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Unable to submit bid")
+      }
+
+      router.push("/installer/bids")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading bid request...
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error || !session) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-3">
+          <Link href="/installer/bids">
+            <Button variant="ghost" size="sm" className="bg-transparent">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back to bids
+            </Button>
+          </Link>
+          <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+            {error || "Bid request not found"}
+          </div>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -73,7 +131,7 @@ export default function SubmitBidPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Submit Bid</h1>
-            <p className="text-muted-foreground">Bid Request {params.id}</p>
+            <p className="text-muted-foreground">Bid Request {session.id}</p>
           </div>
         </div>
 
@@ -84,9 +142,12 @@ export default function SubmitBidPage() {
                 <CardTitle className="text-foreground">Project Details</CardTitle>
                 <CardDescription>Customer requirements for this installation</CardDescription>
               </div>
-              <Badge className="bg-amber-500/10 text-amber-600" variant="secondary">
+              <Badge
+                className={session.status === "open" ? "bg-amber-500/10 text-amber-600" : "bg-muted text-foreground"}
+                variant="secondary"
+              >
                 <Clock className="w-3 h-3 mr-1" />
-                Expires {new Date(bidRequest.expiresAt).toLocaleDateString()}
+                Expires {new Date(session.expiresAt).toLocaleDateString()}
               </Badge>
             </div>
           </CardHeader>
@@ -97,34 +158,32 @@ export default function SubmitBidPage() {
                   <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-sm text-muted-foreground">Location</p>
-                    <p className="font-medium text-foreground">{bidRequest.address}</p>
+                    <p className="font-medium text-foreground">
+                      {session.applicationDetails?.address ?? "Address not available"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <Zap className="w-5 h-5 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-sm text-muted-foreground">Desired Capacity</p>
-                    <p className="font-medium text-foreground">{bidRequest.capacity}</p>
+                    <p className="font-medium text-foreground">{session.applicationDetails?.capacity ?? "N/A"}</p>
                   </div>
                 </div>
               </div>
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Roof Type</p>
-                  <p className="font-medium text-foreground">{bidRequest.roofType}</p>
+                  <p className="text-sm text-muted-foreground">Bid Type</p>
+                  <p className="font-medium text-foreground" data-testid="bid-type">
+                    {session.bidType === "open" ? "Open (all installers)" : "Specific installer request"}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Roof Area</p>
-                  <p className="font-medium text-foreground">{bidRequest.roofArea}</p>
+                  <p className="text-sm text-muted-foreground">Requirements</p>
+                  <p className="font-medium text-foreground">{session.requirements ?? "No extra requirements"}</p>
                 </div>
               </div>
             </div>
-            {bidRequest.requirements && (
-              <div className="mt-6 p-4 bg-muted rounded-lg">
-                <p className="text-sm font-medium text-foreground mb-1">Special Requirements</p>
-                <p className="text-sm text-muted-foreground">{bidRequest.requirements}</p>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -134,7 +193,13 @@ export default function SubmitBidPage() {
             <CardDescription>Choose one of your packages for this bid</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {availablePackages.map((pkg) => (
+            {installerPackages.length === 0 && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <AlertCircle className="w-4 h-4" />
+                No packages available. Add packages to submit a proposal.
+              </div>
+            )}
+            {installerPackages.map((pkg) => (
               <div
                 key={pkg.id}
                 onClick={() => {
@@ -155,7 +220,7 @@ export default function SubmitBidPage() {
                     <div>
                       <p className="font-semibold text-foreground">{pkg.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {pkg.panels} | {pkg.inverter}
+                        {pkg.capacity} • {pkg.panelType} panels
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">{pkg.warranty} warranty</p>
                     </div>
@@ -242,6 +307,12 @@ export default function SubmitBidPage() {
           </Card>
         )}
 
+        {error && (
+          <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
+
         <div className="flex gap-4">
           <Link href="/installer/bids" className="flex-1">
             <Button variant="outline" className="w-full bg-transparent">
@@ -250,11 +321,20 @@ export default function SubmitBidPage() {
           </Link>
           <Button
             onClick={handleSubmitBid}
-            disabled={!selectedPackage}
+            disabled={!selectedPackage || submitting || session.status !== "open"}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
           >
-            <Send className="w-4 h-4 mr-2" />
-            Submit Bid
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Submit Bid
+              </>
+            )}
           </Button>
         </div>
       </div>

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, FileText, Clock, CheckCircle, AlertCircle, Calendar, ArrowRight, Zap } from "lucide-react"
-import { getDemoApplications, type Application } from "@/lib/auth"
+import { fetchApplications, type Application } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -37,11 +37,21 @@ export default function CustomerApplications() {
   const [applications, setApplications] = useState<Application[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    // Load demo applications for current customer
-    const demoApps = getDemoApplications()
-    setApplications(demoApps)
+    async function load() {
+      try {
+        const apps = await fetchApplications()
+        setApplications(apps)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load applications")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [])
 
   const filteredApplications = applications.filter((app) => {
@@ -53,6 +63,7 @@ export default function CustomerApplications() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -105,7 +116,9 @@ export default function CustomerApplications() {
             <CardDescription>Click on an application to view details and track progress</CardDescription>
           </CardHeader>
           <CardContent>
-            {filteredApplications.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">Loading applications...</div>
+            ) : filteredApplications.length === 0 ? (
               <div className="text-center py-12">
                 <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">No applications found</h3>
