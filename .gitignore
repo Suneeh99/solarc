@@ -1,0 +1,19 @@
+# Dependencies and build output
+node_modules
+.next
+.turbo
+dist
+out
+.vercel
+
+# Local databases
+dev.db
+
+# Environment variables
+.env*
+.env
+.env.local
+
+# Logs and OS files
+*.log
+.DS_Store

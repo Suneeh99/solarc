@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, Suspense } from "react"
+import { useEffect, useMemo, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,93 +35,43 @@ import {
   Mail,
   MapPin,
   XCircle,
+  PauseCircle,
 } from "lucide-react"
-
-const installers = [
-  {
-    id: "INS-001",
-    companyName: "Solar Pro Ltd",
-    email: "contact@solarpro.lk",
-    phone: "+94 11 234 5678",
-    address: "123 Solar Street, Colombo",
-    registrationNumber: "REG-2024-001",
-    description: "Leading solar installation company with 10+ years experience",
-    status: "verified",
-    verifiedAt: "2024-01-10",
-    rating: 4.8,
-    completedInstallations: 150,
-    documents: ["Registration Certificate", "Business License", "Insurance Certificate"],
-  },
-  {
-    id: "INS-002",
-    companyName: "Green Energy Solutions",
-    email: "info@greenenergy.lk",
-    phone: "+94 11 345 6789",
-    address: "456 Energy Lane, Kandy",
-    registrationNumber: "REG-2024-002",
-    description: "Eco-friendly solar solutions for residential and commercial",
-    status: "verified",
-    verifiedAt: "2024-01-12",
-    rating: 4.6,
-    completedInstallations: 95,
-    documents: ["Registration Certificate", "Business License"],
-  },
-  {
-    id: "INS-003",
-    companyName: "SunPower Systems",
-    email: "hello@sunpower.lk",
-    phone: "+94 11 456 7890",
-    address: "789 Renewable Road, Galle",
-    registrationNumber: "REG-2024-003",
-    description: "Premium solar installations with cutting-edge technology",
-    status: "pending",
-    submittedAt: "2024-01-19",
-    documents: ["Registration Certificate", "Business License", "Technical Certifications"],
-  },
-  {
-    id: "INS-004",
-    companyName: "Green Solar Co",
-    email: "contact@greensolar.lk",
-    phone: "+94 11 567 8901",
-    address: "321 Sun Avenue, Matara",
-    registrationNumber: "REG-2024-004",
-    description: "Affordable solar solutions for every home",
-    status: "pending",
-    submittedAt: "2024-01-18",
-    documents: ["Registration Certificate"],
-  },
-  {
-    id: "INS-005",
-    companyName: "Rejected Solar Inc",
-    email: "info@rejected.lk",
-    phone: "+94 11 678 9012",
-    address: "999 Failed Street, Colombo",
-    registrationNumber: "REG-2024-005",
-    description: "Solar company with incomplete documentation",
-    status: "rejected",
-    rejectedAt: "2024-01-15",
-    rejectionReason: "Incomplete documentation and invalid business license",
-    documents: ["Registration Certificate"],
-  },
-]
+import type { DocumentMeta, Installer, InstallerStatus } from "@/lib/auth"
 
 function OfficerInstallersContent() {
   const searchParams = useSearchParams()
   const defaultStatus = searchParams.get("status") || "all"
 
+  const [installers, setInstallers] = useState<Installer[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState(defaultStatus === "pending" ? "pending" : "all")
-  const [selectedInstaller, setSelectedInstaller] = useState<(typeof installers)[0] | null>(null)
+  const [selectedInstaller, setSelectedInstaller] = useState<Installer | null>(null)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
-  const [rejectReason, setRejectReason] = useState("")
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false)
+  const [reason, setReason] = useState("")
 
-  const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+  useEffect(() => {
+    const fetchInstallers = async () => {
+      setLoading(true)
+      const res = await fetch("/api/officer/installers")
+      const data = await res.json()
+      setInstallers(data.installers)
+      setLoading(false)
+    }
+
+    fetchInstallers()
+  }, [])
+
+  const getStatusBadge = (status: InstallerStatus) => {
+    const config: Record<InstallerStatus, { label: string; color: string; icon: React.ElementType }> = {
       pending: { label: "Pending", color: "bg-amber-500/10 text-amber-600", icon: Clock },
       verified: { label: "Verified", color: "bg-emerald-500/10 text-emerald-600", icon: CheckCircle },
       rejected: { label: "Rejected", color: "bg-red-500/10 text-red-600", icon: XCircle },
+      suspended: { label: "Suspended", color: "bg-purple-500/10 text-purple-600", icon: PauseCircle },
     }
-    const { label, color, icon: Icon } = config[status] || config.pending
+    const { label, color, icon: Icon } = config[status]
     return (
       <Badge className={color} variant="secondary">
         <Icon className="w-3 h-3 mr-1" />
@@ -130,29 +80,69 @@ function OfficerInstallersContent() {
     )
   }
 
-  const filteredInstallers = installers.filter((installer) => {
-    const matchesSearch =
-      installer.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      installer.id.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesTab =
-      activeTab === "all" ||
-      (activeTab === "pending" && installer.status === "pending") ||
-      (activeTab === "verified" && installer.status === "verified") ||
-      (activeTab === "rejected" && installer.status === "rejected")
-    return matchesSearch && matchesTab
-  })
+  const filteredInstallers = useMemo(() => {
+    return installers.filter((installer) => {
+      const matchesSearch =
+        installer.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        installer.id.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesTab =
+        activeTab === "all" ||
+        (activeTab === "pending" && installer.status === "pending") ||
+        (activeTab === "verified" && installer.status === "verified") ||
+        (activeTab === "rejected" && installer.status === "rejected") ||
+        (activeTab === "suspended" && installer.status === "suspended")
+      return matchesSearch && matchesTab
+    })
+  }, [activeTab, installers, searchQuery])
 
-  const handleVerify = () => {
-    alert(`Installer ${selectedInstaller?.companyName} verified!`)
-    setSelectedInstaller(null)
+  const refreshInstaller = (installer: Installer) => {
+    setInstallers((prev) => prev.map((i) => (i.id === installer.id ? installer : i)))
   }
 
-  const handleReject = () => {
-    alert(`Installer ${selectedInstaller?.companyName} rejected. Reason: ${rejectReason}`)
+  const updateStatus = async (status: InstallerStatus, extra?: { rejectionReason?: string; suspendedReason?: string }) => {
+    if (!selectedInstaller) return
+    const res = await fetch("/api/officer/installers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ installerId: selectedInstaller.id, status, ...extra }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      refreshInstaller(data.installer)
+      setSelectedInstaller(data.installer)
+    } else {
+      alert(data.error || "Failed to update installer")
+    }
+  }
+
+  const handleVerify = () => updateStatus("verified")
+
+  const handleReject = async () => {
+    await updateStatus("rejected", { rejectionReason: reason })
     setShowRejectDialog(false)
-    setSelectedInstaller(null)
-    setRejectReason("")
+    setReason("")
   }
+
+  const handleSuspend = async () => {
+    await updateStatus("suspended", { suspendedReason: reason })
+    setShowSuspendDialog(false)
+    setReason("")
+  }
+
+  const renderDocument = (doc: DocumentMeta, index: number) => (
+    <div key={`${doc.fileName}-${index}`} className="flex items-center justify-between p-2 rounded border border-border">
+      <div>
+        <span className="text-sm text-foreground">{doc.fileName}</span>
+        <p className="text-xs text-muted-foreground">Uploaded {new Date(doc.uploadedAt).toLocaleString()}</p>
+      </div>
+      <Button asChild variant="ghost" size="sm" className="h-6 px-2">
+        <a href={doc.url} target="_blank" rel="noreferrer">
+          <Download className="w-3 h-3 mr-1" />
+          View
+        </a>
+      </Button>
+    </div>
+  )
 
   return (
     <DashboardLayout>
@@ -191,6 +181,9 @@ function OfficerInstallersContent() {
             <TabsTrigger value="rejected">
               Rejected ({installers.filter((i) => i.status === "rejected").length})
             </TabsTrigger>
+            <TabsTrigger value="suspended">
+              Suspended ({installers.filter((i) => i.status === "suspended").length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-4">
@@ -200,41 +193,45 @@ function OfficerInstallersContent() {
                 <CardDescription>Click on an installer to review details</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {filteredInstallers.map((installer) => (
-                    <div
-                      key={installer.id}
-                      className="flex flex-col lg:flex-row lg:items-center justify-between p-4 rounded-lg border border-border hover:border-blue-500/30 transition-colors cursor-pointer"
-                      onClick={() => setSelectedInstaller(installer)}
-                    >
-                      <div className="flex items-start gap-4 mb-4 lg:mb-0">
-                        <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                          <Building className="w-6 h-6 text-amber-500" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-foreground">{installer.companyName}</p>
-                            {getStatusBadge(installer.status)}
+                {loading ? (
+                  <p className="text-muted-foreground">Loading installers...</p>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredInstallers.map((installer) => (
+                      <div
+                        key={installer.id}
+                        className="flex flex-col lg:flex-row lg:items-center justify-between p-4 rounded-lg border border-border hover:border-blue-500/30 transition-colors cursor-pointer"
+                        onClick={() => setSelectedInstaller(installer)}
+                      >
+                        <div className="flex items-start gap-4 mb-4 lg:mb-0">
+                          <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                            <Building className="w-6 h-6 text-amber-500" />
                           </div>
-                          <p className="text-sm text-muted-foreground">{installer.id}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{installer.address}</p>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-foreground">{installer.companyName}</p>
+                              {getStatusBadge(installer.status)}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{installer.id}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{installer.address}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {installer.status === "verified" && (
+                            <div className="flex items-center gap-1">
+                              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                              <span className="font-medium text-foreground">{installer.rating}</span>
+                            </div>
+                          )}
+                          <Button variant="outline" size="sm" className="bg-transparent">
+                            <Eye className="w-4 h-4 mr-1" />
+                            Review
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {installer.status === "verified" && (
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                            <span className="font-medium text-foreground">{installer.rating}</span>
-                          </div>
-                        )}
-                        <Button variant="outline" size="sm" className="bg-transparent">
-                          <Eye className="w-4 h-4 mr-1" />
-                          Review
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -302,8 +299,15 @@ function OfficerInstallersContent() {
                       <p className="text-foreground">{selectedInstaller.registrationNumber}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Status</p>
-                      <p className="text-foreground capitalize">{selectedInstaller.status}</p>
+                      <p className="text-muted-foreground">Verification</p>
+                      <p className="text-foreground capitalize">
+                        {selectedInstaller.status}
+                        {selectedInstaller.verifiedAt && (
+                          <span className="text-xs text-muted-foreground block">
+                            Verified at {new Date(selectedInstaller.verifiedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -311,17 +315,7 @@ function OfficerInstallersContent() {
                 {/* Documents */}
                 <div className="p-4 rounded-lg bg-muted/50">
                   <h4 className="font-semibold text-foreground mb-3">Submitted Documents</h4>
-                  <div className="space-y-2">
-                    {selectedInstaller.documents.map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 rounded border border-border">
-                        <span className="text-sm text-foreground">{doc}</span>
-                        <Button variant="ghost" size="sm" className="h-6 px-2">
-                          <Download className="w-3 h-3 mr-1" />
-                          View
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+                  <div className="space-y-2">{selectedInstaller.documents.map(renderDocument)}</div>
                 </div>
 
                 {/* Rejection Reason */}
@@ -332,6 +326,15 @@ function OfficerInstallersContent() {
                       Rejection Reason
                     </h4>
                     <p className="text-sm text-foreground">{selectedInstaller.rejectionReason}</p>
+                  </div>
+                )}
+                {selectedInstaller.status === "suspended" && selectedInstaller.suspendedReason && (
+                  <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <h4 className="font-semibold text-purple-500 mb-2 flex items-center gap-2">
+                      <PauseCircle className="w-4 h-4" />
+                      Suspension Reason
+                    </h4>
+                    <p className="text-sm text-foreground">{selectedInstaller.suspendedReason}</p>
                   </div>
                 )}
               </div>
@@ -347,9 +350,29 @@ function OfficerInstallersContent() {
                     <ThumbsDown className="w-4 h-4 mr-2" />
                     Reject
                   </Button>
+                  <Button
+                    variant="outline"
+                    className="text-purple-600 border-purple-500/50 hover:bg-purple-500/10 bg-transparent"
+                    onClick={() => setShowSuspendDialog(true)}
+                  >
+                    <PauseCircle className="w-4 h-4 mr-2" />
+                    Suspend
+                  </Button>
                   <Button className="bg-emerald-500 hover:bg-emerald-600 text-white" onClick={handleVerify}>
                     <ThumbsUp className="w-4 h-4 mr-2" />
                     Verify Installer
+                  </Button>
+                </>
+              )}
+              {selectedInstaller?.status === "verified" && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="text-purple-600 border-purple-500/50 hover:bg-purple-500/10 bg-transparent"
+                    onClick={() => setShowSuspendDialog(true)}
+                  >
+                    <PauseCircle className="w-4 h-4 mr-2" />
+                    Suspend
                   </Button>
                 </>
               )}
@@ -371,8 +394,8 @@ function OfficerInstallersContent() {
                 <Label>Rejection Reason</Label>
                 <Textarea
                   placeholder="Enter the reason for rejection..."
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
                   rows={4}
                 />
               </div>
@@ -384,9 +407,42 @@ function OfficerInstallersContent() {
               <Button
                 className="bg-red-500 hover:bg-red-600 text-white"
                 onClick={handleReject}
-                disabled={!rejectReason.trim()}
+                disabled={!reason.trim()}
               >
                 Confirm Rejection
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Suspend Dialog */}
+        <Dialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-foreground">Suspend Installer</DialogTitle>
+              <DialogDescription>Provide context for the suspension. This will be visible to the installer.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Suspension Reason</Label>
+                <Textarea
+                  placeholder="Enter the reason for suspension..."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={4}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSuspendDialog(false)} className="bg-transparent">
+                Cancel
+              </Button>
+              <Button
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={handleSuspend}
+                disabled={!reason.trim()}
+              >
+                Confirm Suspension
               </Button>
             </DialogFooter>
           </DialogContent>

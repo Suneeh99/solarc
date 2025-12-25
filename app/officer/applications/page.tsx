@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, Suspense } from "react"
+import { useEffect, useMemo, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,71 +32,10 @@ import {
   ThumbsDown,
   Download,
   Zap,
+  MapPin,
 } from "lucide-react"
 
-const applications = [
-  {
-    id: "APP-001",
-    customerName: "John Customer",
-    email: "john@example.com",
-    phone: "+94 77 123 4567",
-    address: "123 Main Street, Colombo 07",
-    status: "pending",
-    createdAt: "2024-01-20",
-    roofType: "Flat Concrete",
-    roofArea: "50 sqm",
-    monthlyConsumption: "450 kWh",
-    connectionPhase: "Single Phase",
-    desiredCapacity: "5 kW",
-    documents: { nic: true, bankDetails: true, electricityBill: true, propertyDocument: true },
-  },
-  {
-    id: "APP-002",
-    customerName: "Jane Smith",
-    email: "jane@example.com",
-    phone: "+94 77 234 5678",
-    address: "456 Palm Avenue, Kandy",
-    status: "under_review",
-    createdAt: "2024-01-19",
-    roofType: "Sloped Tile",
-    roofArea: "75 sqm",
-    monthlyConsumption: "350 kWh",
-    connectionPhase: "Single Phase",
-    desiredCapacity: "3 kW",
-    documents: { nic: true, bankDetails: true, electricityBill: true, propertyDocument: false },
-  },
-  {
-    id: "APP-003",
-    customerName: "Mike Johnson",
-    email: "mike@example.com",
-    phone: "+94 77 345 6789",
-    address: "789 Beach Road, Galle",
-    status: "site_visit_scheduled",
-    createdAt: "2024-01-18",
-    siteVisitDate: "2024-01-25",
-    roofType: "Metal Sheet",
-    roofArea: "100 sqm",
-    monthlyConsumption: "800 kWh",
-    connectionPhase: "Three Phase",
-    desiredCapacity: "10 kW",
-    documents: { nic: true, bankDetails: true, electricityBill: true, propertyDocument: true },
-  },
-  {
-    id: "APP-004",
-    customerName: "Sarah Williams",
-    email: "sarah@example.com",
-    phone: "+94 77 456 7890",
-    address: "321 Hill View, Negombo",
-    status: "approved",
-    createdAt: "2024-01-15",
-    roofType: "Flat Concrete",
-    roofArea: "60 sqm",
-    monthlyConsumption: "500 kWh",
-    connectionPhase: "Single Phase",
-    desiredCapacity: "5 kW",
-    documents: { nic: true, bankDetails: true, electricityBill: true, propertyDocument: true },
-  },
-]
+import type { Application, DocumentMeta } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -110,41 +49,88 @@ function OfficerApplicationsContent() {
   const searchParams = useSearchParams()
   const defaultStatus = searchParams.get("status") || "all"
 
+  const [applications, setApplications] = useState<Application[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState(defaultStatus)
-  const [selectedApp, setSelectedApp] = useState<(typeof applications)[0] | null>(null)
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [siteVisitDate, setSiteVisitDate] = useState("")
 
-  const filteredApplications = applications.filter((app) => {
-    const matchesSearch =
-      app.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.id.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === "all" || app.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  useEffect(() => {
+    const fetchApps = async () => {
+      const res = await fetch("/api/officer/applications")
+      const data = await res.json()
+      setApplications(data.applications)
+    }
+    fetchApps()
+  }, [])
 
-  const handleApprove = () => {
-    // In production, this would call an API
-    alert(`Application ${selectedApp?.id} approved!`)
-    setSelectedApp(null)
+  const filteredApplications = useMemo(() => {
+    return applications.filter((app) => {
+      const matchesSearch =
+        app.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.id.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesStatus = statusFilter === "all" || app.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+  }, [applications, searchQuery, statusFilter])
+
+  const refreshApp = (updated: Application) => {
+    setApplications((prev) => prev.map((app) => (app.id === updated.id ? updated : app)))
+    setSelectedApp(updated)
   }
 
-  const handleReject = () => {
-    alert(`Application ${selectedApp?.id} rejected. Reason: ${rejectReason}`)
+  const updateStatus = async (
+    status: Application["status"],
+    extras?: { rejectionReason?: string; siteVisitDate?: string },
+  ) => {
+    if (!selectedApp) return
+    const res = await fetch("/api/officer/applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId: selectedApp.id, status, ...extras }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      refreshApp(data.application)
+    } else {
+      alert(data.error || "Failed to update application")
+    }
+  }
+
+  const handleApprove = () => updateStatus("approved")
+
+  const handleReject = async () => {
+    await updateStatus("rejected", { rejectionReason: rejectReason })
     setShowRejectDialog(false)
-    setSelectedApp(null)
     setRejectReason("")
   }
 
-  const handleScheduleSiteVisit = () => {
-    alert(`Site visit scheduled for ${selectedApp?.id} on ${siteVisitDate}`)
+  const handleScheduleSiteVisit = async () => {
+    await updateStatus("site_visit_scheduled", { siteVisitDate })
     setShowScheduleDialog(false)
-    setSelectedApp(null)
     setSiteVisitDate("")
   }
+
+  const renderDocument = (name: string, doc?: DocumentMeta) => (
+    <div key={name} className="flex items-center justify-between p-2 rounded border border-border">
+      <span className="text-sm capitalize text-foreground">{name.replace(/([A-Z])/g, " $1").trim()}</span>
+      {doc ? (
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-500" />
+          <Button variant="ghost" size="sm" className="h-6 px-2" asChild>
+            <a href={doc.url} target="_blank" rel="noreferrer">
+              <Download className="w-3 h-3" />
+            </a>
+          </Button>
+        </div>
+      ) : (
+        <AlertCircle className="w-4 h-4 text-red-500" />
+      )}
+    </div>
+  )
 
   return (
     <DashboardLayout>
@@ -216,7 +202,7 @@ function OfficerApplicationsContent() {
                         </div>
                         <p className="text-sm text-muted-foreground">{app.id}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {app.address} • {app.desiredCapacity}
+                          {app.address} • {app.technicalDetails?.roofType || app.connectionPhase || "N/A"}
                         </p>
                       </div>
                     </div>
@@ -278,23 +264,19 @@ function OfficerApplicationsContent() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-muted-foreground">Roof Type</p>
-                      <p className="text-foreground">{selectedApp.roofType}</p>
+                      <p className="text-foreground">{selectedApp.technicalDetails.roofType}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Roof Area</p>
-                      <p className="text-foreground">{selectedApp.roofArea}</p>
+                      <p className="text-foreground">{selectedApp.technicalDetails.roofArea}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Monthly Consumption</p>
-                      <p className="text-foreground">{selectedApp.monthlyConsumption}</p>
+                      <p className="text-foreground">{selectedApp.technicalDetails.monthlyConsumption}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Connection Phase</p>
-                      <p className="text-foreground">{selectedApp.connectionPhase}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Desired Capacity</p>
-                      <p className="text-foreground font-semibold">{selectedApp.desiredCapacity}</p>
+                      <p className="text-foreground">{selectedApp.technicalDetails.connectionPhase}</p>
                     </div>
                   </div>
                 </div>
@@ -303,25 +285,25 @@ function OfficerApplicationsContent() {
                 <div className="p-4 rounded-lg bg-muted/50">
                   <h4 className="font-semibold text-foreground mb-3">Uploaded Documents</h4>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(selectedApp.documents).map(([key, uploaded]) => (
-                      <div key={key} className="flex items-center justify-between p-2 rounded border border-border">
-                        <span className="text-sm capitalize text-foreground">
-                          {key.replace(/([A-Z])/g, " $1").trim()}
-                        </span>
-                        {uploaded ? (
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-500" />
-                            <Button variant="ghost" size="sm" className="h-6 px-2">
-                              <Download className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                        )}
-                      </div>
-                    ))}
+                    {renderDocument("nic", selectedApp.documents.nic)}
+                    {renderDocument("bankDetails", selectedApp.documents.bankDetails)}
+                    {renderDocument("electricityBill", selectedApp.documents.electricityBill)}
+                    {renderDocument("propertyDocument", selectedApp.documents.propertyDocument)}
                   </div>
                 </div>
+
+                {/* Review metadata */}
+                {selectedApp.reviewedAt && (
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-blue-500" />
+                      Verification Timeline
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Last reviewed at {new Date(selectedApp.reviewedAt).toLocaleString()}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             <DialogFooter className="flex-col sm:flex-row gap-2">

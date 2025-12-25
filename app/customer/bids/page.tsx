@@ -1,43 +1,61 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import {
+  Gavel,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Plus,
+  ArrowRight,
+  Timer,
+} from "lucide-react"
+
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer } from "lucide-react"
-import { getApprovedApplications } from "@/lib/auth"
 
-// Demo bid sessions
-const demoBidSessions = [
-  {
-    id: "BID-001",
-    applicationId: "APP-001",
-    startedAt: "2024-01-20T10:00:00Z",
-    expiresAt: "2024-01-22T10:00:00Z",
-    status: "open" as const,
-    bidsCount: 3,
-  },
-  {
-    id: "BID-002",
-    applicationId: "APP-002",
-    startedAt: "2024-01-15T08:00:00Z",
-    expiresAt: "2024-01-17T08:00:00Z",
-    status: "closed" as const,
-    bidsCount: 5,
-    selectedBid: {
-      installerName: "Solar Pro Ltd",
-      price: 420000,
-    },
-  },
-]
+import { fetchBidSessions, type BidSession } from "@/lib/auth"
 
 export default function CustomerBids() {
-  const [bidSessions] = useState(demoBidSessions)
-  const hasApprovedApplication = useMemo(() => getApprovedApplications().length > 0, [])
+  const [bidSessions, setBidSessions] = useState<BidSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [now, setNow] = useState(() => new Date())
 
-  const getStatusBadge = (status: string) => {
+  // Update remaining time every minute
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60 * 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const sessions = await fetchBidSessions()
+        setBidSessions(sessions)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load bids")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+  }, [])
+
+  // Until applications are fetched separately, assume the user is allowed to open bids
+  const hasApprovedApplication = true
+
+  const getStatusBadge = (status: BidSession["status"]) => {
     switch (status) {
       case "open":
         return (
@@ -60,46 +78,56 @@ export default function CustomerBids() {
             Expired
           </Badge>
         )
-      default:
-        return null
     }
   }
 
   const getTimeRemaining = (expiresAt: string) => {
-    const now = new Date()
-    const expiry = new Date(expiresAt)
-    const diff = expiry.getTime() - now.getTime()
-
+    const diff = new Date(expiresAt).getTime() - now.getTime()
     if (diff <= 0) return "Expired"
 
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
 
+    if (days > 0) return `${days}d ${remainingHours}h remaining`
     return `${hours}h ${minutes}m remaining`
   }
+
+  const enrichedSessions = useMemo(() => {
+    return bidSessions.map((session) => {
+      const selectedBid = session.selectedBidId
+        ? session.bids.find((bid) => bid.id === session.selectedBidId)
+        : undefined
+
+      return { ...session, selectedBid }
+    })
+  }, [bidSessions])
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">My Bids</h1>
-            <p className="text-muted-foreground">Manage your bid sessions and view installer proposals</p>
+            <p className="text-muted-foreground">
+              Manage your bid sessions and installer proposals
+            </p>
           </div>
-          <Link href={hasApprovedApplication ? "/customer/bids/new" : "/customer/applications"}>
-            <Button
-              className="bg-emerald-500 hover:bg-emerald-600 text-white"
-              disabled={!hasApprovedApplication}
-              title={hasApprovedApplication ? undefined : "You need an approved application to open a bid"}
-            >
+          <Link href="/customer/bids/new">
+            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
               <Plus className="w-4 h-4 mr-2" />
               Open New Bid
             </Button>
           </Link>
         </div>
 
-        {/* Info Card */}
         <Card className="bg-blue-500/5 border-blue-500/20">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -107,32 +135,36 @@ export default function CustomerBids() {
               <div className="text-sm">
                 <p className="font-medium text-foreground">How Bidding Works</p>
                 <p className="text-muted-foreground">
-                  When you open a bid, installers have 48 hours to submit their proposals. You can review and select the
-                  best offer. If no bid is selected within 48 hours, the bid expires and you can browse packages
-                  directly.
+                  Installers can submit proposals until the bid window closes.
+                  Accepting a bid moves your application into installation.
+                  Expired bids allow you to browse packages directly.
                 </p>
-                {!hasApprovedApplication && (
-                  <p className="text-xs text-red-500 mt-2">
-                    You need at least one approved application before opening bids.
-                  </p>
-                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Bid Sessions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Bid Sessions ({bidSessions.length})</CardTitle>
-            <CardDescription>View and manage your active and past bid sessions</CardDescription>
+            <CardTitle>Bid Sessions ({enrichedSessions.length})</CardTitle>
+            <CardDescription>
+              Active and completed bidding sessions
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {bidSessions.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Loading bid sessions...
+              </div>
+            ) : enrichedSessions.length === 0 ? (
               <div className="text-center py-12">
                 <Gavel className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium text-foreground mb-2">No bid sessions yet</h3>
-                <p className="text-muted-foreground mb-4">Open a bid to receive proposals from verified installers</p>
+                <h3 className="text-lg font-medium text-foreground mb-2">
+                  No bid sessions yet
+                </h3>
+                <p className="text-muted-foreground mb-4">
+                  Open a bid to receive proposals from verified installers
+                </p>
                 <Link href="/customer/bids/new">
                   <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
                     <Plus className="w-4 h-4 mr-2" />
@@ -142,7 +174,7 @@ export default function CustomerBids() {
               </div>
             ) : (
               <div className="space-y-4">
-                {bidSessions.map((session) => (
+                {enrichedSessions.map((session) => (
                   <div
                     key={session.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border border-border"
@@ -152,26 +184,26 @@ export default function CustomerBids() {
                         <Gavel className="w-6 h-6 text-amber-500" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-foreground">{session.id}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-foreground">
+                            {session.id}
+                          </p>
                           {getStatusBadge(session.status)}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Application: {session.applicationId} • {session.bidsCount} bids received
+                          Application: {session.applicationId} •{" "}
+                          {session.bids.length} bids received
                         </p>
                         {session.status === "open" && (
-                          <p className="text-xs text-amber-500 mt-1">{getTimeRemaining(session.expiresAt)}</p>
-                        )}
-                        {session.selectedBid && (
-                          <p className="text-xs text-emerald-500 mt-1">
-                            Selected: {session.selectedBid.installerName} - Rs.{" "}
-                            {session.selectedBid.price.toLocaleString()}
+                          <p className="text-xs text-amber-500 mt-1">
+                            {getTimeRemaining(session.expiresAt)}
                           </p>
                         )}
                       </div>
                     </div>
+
                     <Link href={`/customer/bids/${session.id}`}>
-                      <Button variant="outline" size="sm" className="bg-transparent">
+                      <Button variant="outline" size="sm">
                         View Bids
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
