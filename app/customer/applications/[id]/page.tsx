@@ -21,7 +21,7 @@ import {
   CreditCard,
   Building,
 } from "lucide-react"
-import { getDemoApplications, type Application } from "@/lib/auth"
+import type { Application, DocumentMeta } from "@/lib/auth"
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Pending Review", color: "bg-amber-500/10 text-amber-600", icon: Clock },
@@ -60,11 +60,15 @@ export default function ApplicationDetail() {
   const [application, setApplication] = useState<Application | null>(null)
 
   useEffect(() => {
-    const apps = getDemoApplications()
-    const app = apps.find((a) => a.id === params.id)
-    if (app) {
-      setApplication(app)
+    const fetchApplication = async () => {
+      const res = await fetch("/api/customer/applications")
+      const data = await res.json()
+      const app = (data.applications as Application[]).find((a) => a.id === params.id)
+      if (app) {
+        setApplication(app)
+      }
     }
+    fetchApplication()
   }, [params.id])
 
   if (!application) {
@@ -255,22 +259,31 @@ export default function ApplicationDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {Object.entries(application.documents).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground capitalize">
-                        {key.replace(/([A-Z])/g, " $1").trim()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{value}</p>
+              {Object.entries(application.documents).map(([key, value]) => {
+                const doc = value as DocumentMeta | undefined
+                return (
+                  <div key={key} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-5 h-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground capitalize">
+                          {key.replace(/([A-Z])/g, " $1").trim()}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc?.fileName ?? "Pending upload"} {doc?.uploadedAt && `• ${new Date(doc.uploadedAt).toLocaleString()}`}
+                        </p>
+                      </div>
                     </div>
+                    {doc && (
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={doc.url} target="_blank" rel="noreferrer">
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Download className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </CardContent>
           </Card>
         </div>

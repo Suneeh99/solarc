@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,13 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Calendar, Clock, Users, Zap, Info } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, Users, Zap, Info, ShieldAlert } from "lucide-react"
 import Link from "next/link"
-
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import type { Application } from "@/lib/auth"
 
 export default function NewBidSession() {
   const router = useRouter()
@@ -25,6 +21,7 @@ export default function NewBidSession() {
   const preSelectedInstaller = searchParams.get("installer") || ""
   const preSelectedPackage = searchParams.get("package") || ""
 
+  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
   const [selectedApplication, setSelectedApplication] = useState(preSelectedApp)
   const [bidDuration, setBidDuration] = useState("7")
   const [maxBudget, setMaxBudget] = useState("")
@@ -33,6 +30,17 @@ export default function NewBidSession() {
   )
   const [bidType, setBidType] = useState<"open" | "specific">(preSelectedInstaller ? "specific" : "open")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchApproved = async () => {
+      const res = await fetch("/api/customer/applications/approved")
+      const data = await res.json()
+      setApprovedApplications(data.applications)
+    }
+    fetchApproved()
+  }, [])
+
+  const hasApproved = useMemo(() => approvedApplications.length > 0, [approvedApplications])
 
   const handleCreateBidSession = () => {
     if (!selectedApplication) {
@@ -63,6 +71,32 @@ export default function NewBidSession() {
             <p className="text-muted-foreground">Request quotes from verified installers</p>
           </div>
         </div>
+
+        {!hasApproved && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-4 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">Approval required</p>
+                <p className="text-sm text-muted-foreground">
+                  You need an approved application before opening a bid session or requesting quotes.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Link href="/customer/applications/new">
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Submit application
+                    </Button>
+                  </Link>
+                  <Link href="/customer/applications">
+                    <Button size="sm" variant="outline" className="bg-transparent">
+                      Track applications
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bid Type Selection */}
         <Card>
@@ -148,11 +182,15 @@ export default function NewBidSession() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-foreground">{app.id}</p>
-                      <p className="text-sm text-muted-foreground">{app.address}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.technicalDetails.roofType} • {app.technicalDetails.monthlyConsumption}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-emerald-500">{app.capacity}</p>
-                      <p className="text-xs text-muted-foreground">Approved {app.approvedDate}</p>
+                      <p className="font-medium text-emerald-500">{app.status}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Reviewed {app.reviewedAt ? new Date(app.reviewedAt).toLocaleDateString() : "—"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -198,45 +236,35 @@ export default function NewBidSession() {
                 onChange={(e) => setMaxBudget(e.target.value)}
                 className="bg-background"
               />
-              <p className="text-xs text-muted-foreground">Leave empty if you have no budget limit</p>
             </div>
 
             <div className="space-y-2">
-              <Label>Special Requirements (Optional)</Label>
+              <Label className="flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                Special Requirements
+              </Label>
               <Textarea
+                placeholder="Describe project needs, roof condition, timing, or preferred equipment..."
                 value={requirements}
                 onChange={(e) => setRequirements(e.target.value)}
-                className="h-24 bg-background"
-                placeholder="Any specific requirements or preferences..."
+                className="min-h-[100px]"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* How Bidding Works */}
-        <Card className="bg-muted/50 border-dashed">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-                <Users className="w-5 h-5 text-emerald-500" />
-              </div>
-              <div>
+        {/* Info Card */}
+        <Card className="bg-blue-500/5 border-blue-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-blue-500 mt-0.5" />
+              <div className="text-sm">
                 <p className="font-medium text-foreground">How Bidding Works</p>
-                <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                  <li className="flex items-center gap-2">
-                    <Clock className="w-3 h-3" />
-                    Your bid request will be sent to{" "}
-                    {bidType === "open" ? "all verified installers" : "the selected installer"}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Clock className="w-3 h-3" />
-                    Installers can submit their quotes within the bid duration
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Clock className="w-3 h-3" />
-                    Compare quotes and select the best installer for your needs
-                  </li>
-                </ul>
+                <p className="text-muted-foreground">
+                  When you open a bid, installers have 48 hours to submit their proposals. You can review and select the
+                  best offer. If no bid is selected within 48 hours, the bid expires and you can browse packages
+                  directly.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -251,8 +279,9 @@ export default function NewBidSession() {
           </Link>
           <Button
             onClick={handleCreateBidSession}
-            disabled={!selectedApplication || loading}
+            disabled={!selectedApplication || loading || !hasApproved}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+            title={hasApproved ? undefined : "Application approval required before opening bids"}
           >
             {loading ? "Creating..." : "Create Bid Session"}
           </Button>

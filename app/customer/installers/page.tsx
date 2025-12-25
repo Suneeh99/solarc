@@ -1,34 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Building, Star, CheckCircle, Package, ArrowRight, MapPin, Phone } from "lucide-react"
-import { getDemoInstallers, type Installer } from "@/lib/auth"
+import { Search, Building, Star, CheckCircle, Package, ArrowRight, MapPin, Phone, ShieldAlert } from "lucide-react"
+import type { Application, Installer } from "@/lib/auth"
 
 export default function CustomerInstallers() {
   const [installers, setInstallers] = useState<Installer[]>([])
+  const [approvedApps, setApprovedApps] = useState<Application[]>([])
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
-    console.log("[v0] CustomerInstallers - Loading installers")
-    const allInstallers = getDemoInstallers().filter((i) => i.verified)
-    console.log(
-      "[v0] Filtered verified installers:",
-      allInstallers.map((i) => ({ id: i.id, name: i.companyName, packageCount: i.packages.length })),
-    )
-    setInstallers(allInstallers)
+    const fetchInstallers = async () => {
+      const res = await fetch("/api/customer/installers")
+      const data = await res.json()
+      setInstallers(data.installers)
+    }
+    const fetchApprovedApplications = async () => {
+      const res = await fetch("/api/customer/applications/approved")
+      const data = await res.json()
+      setApprovedApps(data.applications)
+    }
+
+    fetchInstallers()
+    fetchApprovedApplications()
   }, [])
 
-  const filteredInstallers = installers.filter(
-    (installer) =>
-      installer.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      installer.address.toLowerCase().includes(searchQuery.toLowerCase()),
+  const filteredInstallers = useMemo(
+    () =>
+      installers.filter(
+        (installer) =>
+          installer.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          installer.address.toLowerCase().includes(searchQuery.toLowerCase()),
+      ),
+    [installers, searchQuery],
   )
+
+  const hasApproved = approvedApps.length > 0
 
   return (
     <DashboardLayout>
@@ -53,6 +66,34 @@ export default function CustomerInstallers() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Gating */}
+        {!hasApproved && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-4 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">Approval required</p>
+                <p className="text-sm text-muted-foreground">
+                  Browse installers anytime, but you can only request quotes once an officer approves your application.
+                  Submit an application or wait for approval to unlock bidding.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Link href="/customer/applications/new">
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Submit application
+                    </Button>
+                  </Link>
+                  <Link href="/customer/applications">
+                    <Button size="sm" variant="outline" className="bg-transparent">
+                      Track applications
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Installers List */}
         <div className="space-y-6">
@@ -112,7 +153,13 @@ export default function CustomerInstallers() {
                       Available Packages ({installer.packages.length})
                     </h4>
                     <Link href={`/customer/installers/${installer.id}/packages`}>
-                      <Button variant="outline" size="sm" className="bg-transparent">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                        disabled={!hasApproved}
+                        title={hasApproved ? undefined : "Application approval required before bidding"}
+                      >
                         View All Packages
                         <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
@@ -138,8 +185,13 @@ export default function CustomerInstallers() {
                         <div className="flex items-center justify-between">
                           <p className="text-lg font-bold text-emerald-500">Rs. {pkg.price.toLocaleString()}</p>
                           <Link href={`/customer/installers/${installer.id}/packages/${pkg.id}`}>
-                            <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                              Select
+                            <Button
+                              size="sm"
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                              disabled={!hasApproved}
+                              title={hasApproved ? undefined : "Application approval required before bidding"}
+                            >
+                              {hasApproved ? "Select" : "View"}
                               <ArrowRight className="w-3 h-3 ml-1" />
                             </Button>
                           </Link>

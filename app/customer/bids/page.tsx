@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer } from "lucide-react"
+import { Gavel, Clock, CheckCircle, XCircle, Plus, ArrowRight, Timer, ShieldAlert } from "lucide-react"
+import type { Application } from "@/lib/auth"
 
 // Demo bid sessions
 const demoBidSessions = [
@@ -34,6 +35,18 @@ const demoBidSessions = [
 
 export default function CustomerBids() {
   const [bidSessions] = useState(demoBidSessions)
+  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
+
+  useEffect(() => {
+    const fetchApproved = async () => {
+      const res = await fetch("/api/customer/applications/approved")
+      const data = await res.json()
+      setApprovedApplications(data.applications)
+    }
+    fetchApproved()
+  }, [])
+
+  const hasApproved = useMemo(() => approvedApplications.length > 0, [approvedApplications])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -85,8 +98,12 @@ export default function CustomerBids() {
             <h1 className="text-2xl font-bold text-foreground">My Bids</h1>
             <p className="text-muted-foreground">Manage your bid sessions and view installer proposals</p>
           </div>
-          <Link href="/customer/bids/new">
-            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
+          <Link href={hasApproved ? "/customer/bids/new" : "#"} aria-disabled={!hasApproved}>
+            <Button
+              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              disabled={!hasApproved}
+              title={hasApproved ? undefined : "Application approval required before opening a new bid"}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Open New Bid
             </Button>
@@ -109,6 +126,32 @@ export default function CustomerBids() {
             </div>
           </CardContent>
         </Card>
+
+        {!hasApproved && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-4 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">Approval required to bid</p>
+                <p className="text-sm text-muted-foreground">
+                  Submit an application and wait for officer approval before opening or accepting bids.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Link href="/customer/applications/new">
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Submit application
+                    </Button>
+                  </Link>
+                  <Link href="/customer/applications">
+                    <Button size="sm" variant="outline" className="bg-transparent">
+                      Track applications
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bid Sessions */}
         <Card>
