@@ -32,14 +32,9 @@ import {
   MapPin,
   Phone,
   Mail,
+  ShieldAlert,
 } from "lucide-react"
-import { getDemoInstallers, type Installer, type SolarPackage } from "@/lib/auth"
-
-// Demo approved applications for customer
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import type { Installer, SolarPackage, Application } from "@/lib/auth"
 
 export default function PackageDetailPage() {
   const params = useParams()
@@ -55,38 +50,35 @@ export default function PackageDetailPage() {
   const [requirements, setRequirements] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [approvedApplications, setApprovedApplications] = useState<Application[]>([])
 
   useEffect(() => {
-    console.log("[v0] PackageDetailPage - params:", { id, pkgId })
-    const installers = getDemoInstallers()
-    console.log(
-      "[v0] Available installers:",
-      installers.map((i) => ({ id: i.id, packages: i.packages.map((p) => p.id) })),
-    )
-
-    const foundInstaller = installers.find((i) => i.id === id)
-    console.log("[v0] Found installer:", foundInstaller?.id, foundInstaller?.companyName)
-
-    if (foundInstaller) {
-      setInstaller(foundInstaller)
-      console.log(
-        "[v0] Looking for package:",
-        pkgId,
-        "in packages:",
-        foundInstaller.packages.map((p) => p.id),
-      )
-      const foundPkg = foundInstaller.packages.find((p) => p.id === pkgId)
-      console.log("[v0] Found package:", foundPkg?.id, foundPkg?.name)
-
-      if (foundPkg) {
-        setPkg(foundPkg)
-        setError(null)
+    const fetchInstaller = async () => {
+      const res = await fetch("/api/customer/installers")
+      const data = await res.json()
+      const foundInstaller = data.installers.find((i: Installer) => i.id === id)
+      if (foundInstaller) {
+        setInstaller(foundInstaller)
+        const foundPkg = foundInstaller.packages.find((p) => p.id === pkgId)
+        if (foundPkg) {
+          setPkg(foundPkg)
+          setError(null)
+        } else {
+          setError(`Package "${pkgId}" not found for installer "${foundInstaller.companyName}"`)
+        }
       } else {
-        setError(`Package "${pkgId}" not found for installer "${foundInstaller.companyName}"`)
+        setError(`Installer "${id}" not found`)
       }
-    } else {
-      setError(`Installer "${id}" not found`)
     }
+
+    const fetchApproved = async () => {
+      const res = await fetch("/api/customer/applications/approved")
+      const data = await res.json()
+      setApprovedApplications(data.applications)
+    }
+
+    fetchInstaller()
+    fetchApproved()
   }, [id, pkgId])
 
   const handleCreateBid = () => {
@@ -95,13 +87,6 @@ export default function PackageDetailPage() {
       return
     }
     setLoading(true)
-    console.log("[v0] Creating bid with:", {
-      selectedApplication,
-      bidDuration,
-      requirements,
-      installer: installer?.id,
-      package: pkg?.id,
-    })
     // Simulate API call
     setTimeout(() => {
       setLoading(false)
@@ -137,6 +122,8 @@ export default function PackageDetailPage() {
     )
   }
 
+  const hasApproved = approvedApplications.length > 0
+
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
@@ -152,6 +139,32 @@ export default function PackageDetailPage() {
             <p className="text-muted-foreground">by {installer.companyName}</p>
           </div>
         </div>
+
+        {!hasApproved && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-4 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">Approval required</p>
+                <p className="text-sm text-muted-foreground">
+                  You need an approved application before opening a bid or requesting a quote on this package.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Link href="/customer/applications/new">
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Submit application
+                    </Button>
+                  </Link>
+                  <Link href="/customer/applications">
+                    <Button size="sm" variant="outline" className="bg-transparent">
+                      Track applications
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Installer Info Card */}
         <Card>
@@ -317,7 +330,11 @@ export default function PackageDetailPage() {
                 {/* Open Bid Dialog */}
                 <Dialog open={openBidDialog} onOpenChange={setOpenBidDialog}>
                   <DialogTrigger asChild>
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={!hasApproved}
+                      title={hasApproved ? undefined : "Application approval required before requesting a quote"}
+                    >
                       <Gavel className="w-4 h-4 mr-2" />
                       Request Quote / Open Bid
                     </Button>
@@ -341,14 +358,18 @@ export default function PackageDetailPage() {
                       {/* Select Application */}
                       <div className="space-y-2">
                         <Label>Select Approved Application</Label>
-                        <Select value={selectedApplication} onValueChange={setSelectedApplication}>
+                        <Select
+                          value={selectedApplication}
+                          onValueChange={setSelectedApplication}
+                          disabled={!approvedApplications.length}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Choose an application" />
                           </SelectTrigger>
                           <SelectContent>
                             {approvedApplications.map((app) => (
                               <SelectItem key={app.id} value={app.id}>
-                                {app.id} - {app.address} ({app.capacity})
+                                {app.id} - {app.technicalDetails.roofType} ({app.technicalDetails.monthlyConsumption})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -401,7 +422,7 @@ export default function PackageDetailPage() {
                       <Button
                         className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                         onClick={handleCreateBid}
-                        disabled={!selectedApplication || loading}
+                        disabled={!selectedApplication || loading || !approvedApplications.length}
                       >
                         {loading ? "Creating..." : "Create Bid"}
                       </Button>
