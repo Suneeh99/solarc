@@ -40,8 +40,6 @@ import {
   Zap,
   Sun,
   Shield,
-  Calendar,
-  Package,
   Gavel,
   MapPin,
   Phone,
@@ -125,6 +123,8 @@ export default function PackageDetailPage() {
     if (!selectedApplication) return
 
     setSubmitting(true)
+    setError(null)
+
     try {
       const res = await fetch("/api/bids", {
         method: "POST",

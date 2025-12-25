@@ -27,7 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-import { fetchCurrentUser, fetchApplications, type Application, type User } from "@/lib/auth"
+import {
+  fetchCurrentUser,
+  fetchApplications,
+  type Application,
+  type User,
+} from "@/lib/auth"
 
 export default function NewBidSession() {
   const router = useRouter()
@@ -41,13 +46,13 @@ export default function NewBidSession() {
   const [applications, setApplications] = useState<Application[]>([])
   const [selectedApplication, setSelectedApplication] = useState(preSelectedApp)
 
+  const [bidType, setBidType] = useState<"open" | "specific">(
+    preSelectedInstaller ? "specific" : "open",
+  )
   const [bidDuration, setBidDuration] = useState("2")
   const [maxBudget, setMaxBudget] = useState("")
   const [requirements, setRequirements] = useState(
     preSelectedPackage ? `Interested in package: ${preSelectedPackage}` : "",
-  )
-  const [bidType, setBidType] = useState<"open" | "specific">(
-    preSelectedInstaller ? "specific" : "open",
   )
 
   const [loading, setLoading] = useState(true)
@@ -103,7 +108,7 @@ export default function NewBidSession() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
         throw new Error(data.error || "Unable to create bid session")
       }
 
@@ -126,16 +131,28 @@ export default function NewBidSession() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Create Bid Session</h1>
-            <p className="text-muted-foreground">Request quotes from verified installers</p>
+            <h1 className="text-2xl font-bold text-foreground">
+              Create Bid Session
+            </h1>
+            <p className="text-muted-foreground">
+              Request quotes from verified installers
+            </p>
           </div>
         </div>
+
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
 
         {/* Bid Type */}
         <Card>
           <CardHeader>
             <CardTitle>Bid Type</CardTitle>
-            <CardDescription>Choose how you want to receive quotes</CardDescription>
+            <CardDescription>
+              Choose how you want to receive quotes
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div
@@ -178,7 +195,9 @@ export default function NewBidSession() {
         <Card>
           <CardHeader>
             <CardTitle>Select Application</CardTitle>
-            <CardDescription>Choose an approved application</CardDescription>
+            <CardDescription>
+              Choose an approved application
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -191,34 +210,39 @@ export default function NewBidSession() {
                 No approved applications available.
               </p>
             ) : (
-              applications.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => setSelectedApplication(app.id)}
-                  className={`p-4 rounded-lg border-2 cursor-pointer ${
-                    selectedApplication === app.id
-                      ? "border-emerald-500 bg-emerald-500/10"
-                      : "border-border hover:border-emerald-500/50"
-                  }`}
-                >
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="font-semibold">{app.id}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {app.customerName}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-emerald-600 capitalize">
-                        {app.status.replace("_", " ")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Updated {new Date(app.updatedAt).toLocaleDateString()}
-                      </p>
+              <div className="space-y-3">
+                {applications.map((app) => (
+                  <div
+                    key={app.id}
+                    onClick={() => setSelectedApplication(app.id)}
+                    className={`p-4 rounded-lg border-2 cursor-pointer ${
+                      selectedApplication === app.id
+                        ? "border-emerald-500 bg-emerald-500/10"
+                        : "border-border hover:border-emerald-500/50"
+                    }`}
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {app.id}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {app.customerName}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-emerald-600 capitalize">
+                          {app.status.replace("_", " ")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Updated{" "}
+                          {new Date(app.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -227,7 +251,9 @@ export default function NewBidSession() {
         <Card>
           <CardHeader>
             <CardTitle>Bid Settings</CardTitle>
-            <CardDescription>Configure your preferences</CardDescription>
+            <CardDescription>
+              Configure your preferences
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -268,6 +294,25 @@ export default function NewBidSession() {
                 onChange={(e) => setRequirements(e.target.value)}
                 placeholder="Project details, preferences, timing..."
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Info */}
+        <Card className="bg-blue-500/5 border-blue-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-blue-500 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-foreground">
+                  How bidding works
+                </p>
+                <p className="text-muted-foreground">
+                  Installers can submit proposals until the bid window closes.
+                  You can review offers and accept the best one, or let the bid
+                  expire and browse packages directly.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

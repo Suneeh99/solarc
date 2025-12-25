@@ -133,10 +133,9 @@ export default function CustomerBids() {
               <div className="text-sm">
                 <p className="font-medium text-foreground">How Bidding Works</p>
                 <p className="text-muted-foreground">
-                  When you open a bid, installers have a limited time to submit
-                  proposals. Accepting a bid moves your application into
-                  installation. Expired bids allow you to browse packages
-                  directly.
+                  Installers can submit proposals until the bid window closes.
+                  Accepting a bid moves your application into installation.
+                  Expired bids allow you to browse packages directly.
                 </p>
               </div>
             </div>
@@ -203,7 +202,11 @@ export default function CustomerBids() {
                     </div>
 
                     <Link href={`/customer/bids/${session.id}`}>
-                      <Button variant="outline" size="sm" className="bg-transparent">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-transparent"
+                      >
                         View Bids
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>

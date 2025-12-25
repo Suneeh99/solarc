@@ -45,6 +45,7 @@ export default function CustomerInstallers() {
         setLoading(false)
       }
     }
+
     load()
   }, [])
 
@@ -62,9 +63,7 @@ export default function CustomerInstallers() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Find Installer
-          </h1>
+          <h1 className="text-2xl font-bold text-foreground">Find Installer</h1>
           <p className="text-muted-foreground">
             Browse verified solar installation companies and their packages
           </p>
@@ -82,7 +81,7 @@ export default function CustomerInstallers() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by company name or location…"
+                placeholder="Search by company name or location"
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -166,9 +165,7 @@ export default function CustomerInstallers() {
                       <Package className="w-4 h-4 text-emerald-500" />
                       Packages ({installer.packages.length})
                     </h4>
-                    <Link
-                      href={`/customer/installers/${installer.id}/packages`}
-                    >
+                    <Link href={`/customer/installers/${installer.id}/packages`}>
                       <Button variant="outline" size="sm">
                         View all
                         <ArrowRight className="w-3 h-3 ml-1" />

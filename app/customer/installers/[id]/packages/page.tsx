@@ -60,11 +60,8 @@ export default function InstallerPackagesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Bid dialog state
   const [openBidDialog, setOpenBidDialog] = useState(false)
-  const [selectedPackage, setSelectedPackage] = useState<SolarPackage | null>(
-    null,
-  )
+  const [selectedPackage, setSelectedPackage] = useState<SolarPackage | null>(null)
   const [selectedApplication, setSelectedApplication] = useState("")
   const [bidDuration, setBidDuration] = useState("7")
   const [requirements, setRequirements] = useState("")
@@ -94,7 +91,6 @@ export default function InstallerPackagesPage() {
             ].includes(app.status),
           ),
         )
-        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load installer")
       } finally {
@@ -105,15 +101,17 @@ export default function InstallerPackagesPage() {
     load()
   }, [installerId])
 
-  const handleOpenBidDialog = (pkg: SolarPackage) => {
+  function handleOpenBidDialog(pkg: SolarPackage) {
     setSelectedPackage(pkg)
     setOpenBidDialog(true)
   }
 
-  const handleCreateBid = async () => {
+  async function handleCreateBid() {
     if (!selectedApplication || !selectedPackage) return
 
     setSubmitting(true)
+    setError(null)
+
     try {
       const res = await fetch("/api/bids", {
         method: "POST",
@@ -180,13 +178,11 @@ export default function InstallerPackagesPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold">{installer.companyName}</h1>
-            <p className="text-muted-foreground">
-              View all available packages
-            </p>
+            <p className="text-muted-foreground">View all available packages</p>
           </div>
         </div>
 
-        {/* Installer Card */}
+        {/* Installer */}
         <Card>
           <CardContent className="p-6 flex justify-between flex-wrap gap-4">
             <div className="flex gap-4">
@@ -216,6 +212,7 @@ export default function InstallerPackagesPage() {
                 </div>
               </div>
             </div>
+
             <div className="flex items-center gap-6">
               <div className="text-center">
                 <div className="flex items-center gap-1">
@@ -225,9 +222,7 @@ export default function InstallerPackagesPage() {
                 <p className="text-xs text-muted-foreground">Rating</p>
               </div>
               <div className="text-center">
-                <p className="font-semibold">
-                  {installer.completedInstallations}
-                </p>
+                <p className="font-semibold">{installer.completedInstallations}</p>
                 <p className="text-xs text-muted-foreground">Installations</p>
               </div>
             </div>
@@ -241,9 +236,7 @@ export default function InstallerPackagesPage() {
               <Package className="w-5 h-5 text-emerald-500" />
               Packages ({installer.packages.length})
             </CardTitle>
-            <CardDescription>
-              Choose a package to request a bid
-            </CardDescription>
+            <CardDescription>Select a package to request a bid</CardDescription>
           </CardHeader>
           <CardContent>
             {installer.packages.length === 0 ? (
@@ -265,9 +258,7 @@ export default function InstallerPackagesPage() {
                       Rs. {pkg.price.toLocaleString()}
                     </p>
                     <div className="flex gap-2">
-                      <Link
-                        href={`/customer/installers/${installer.id}/packages/${pkg.id}`}
-                      >
+                      <Link href={`/customer/installers/${installer.id}/packages/${pkg.id}`}>
                         <Button variant="outline" size="sm">
                           View
                         </Button>
@@ -300,10 +291,7 @@ export default function InstallerPackagesPage() {
 
             <div className="space-y-4">
               <Label>Application</Label>
-              <Select
-                value={selectedApplication}
-                onValueChange={setSelectedApplication}
-              >
+              <Select value={selectedApplication} onValueChange={setSelectedApplication}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select application" />
                 </SelectTrigger>

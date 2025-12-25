@@ -1,3 +1,7 @@
+/* ------------------------------------------------------------------ */
+/* Core domain types                                                    */
+/* ------------------------------------------------------------------ */
+
 export type UserRole = "customer" | "installer" | "officer"
 
 export interface User {
@@ -15,11 +19,7 @@ export interface User {
   } | null
 }
 
-export type InstallerStatus =
-  | "pending"
-  | "verified"
-  | "rejected"
-  | "suspended"
+export type InstallerStatus = "pending" | "verified" | "rejected" | "suspended"
 
 export interface DocumentMeta {
   fileName: string
@@ -172,6 +172,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/* ------------------------------------------------------------------ */
+/* Auth                                                                 */
+/* ------------------------------------------------------------------ */
+
 export async function fetchCurrentUser(): Promise<User | null> {
   const response = await fetch("/api/auth/me", { cache: "no-store" })
   if (response.status === 401) return null
@@ -215,6 +219,10 @@ export async function register(payload: {
 export async function logout() {
   await fetch("/api/auth/logout", { method: "POST" })
 }
+
+/* ------------------------------------------------------------------ */
+/* Data fetchers                                                        */
+/* ------------------------------------------------------------------ */
 
 export async function fetchApplications(): Promise<Application[]> {
   const response = await fetch("/api/applications", { cache: "no-store" })
