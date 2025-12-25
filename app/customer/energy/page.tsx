@@ -1,13 +1,14 @@
 "use client"
 
+import type { MonthlyBillingSummary, MeterReading } from "@/lib/data/meter-readings"
 import { Badge } from "@/components/ui/badge"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Zap, TrendingUp, Sun, Leaf, DollarSign } from "lucide-react"
+import { Zap, TrendingUp, Sun, Leaf, DollarSign, Loader2, AlertCircle } from "lucide-react"
 import {
   AreaChart,
   Area,
@@ -22,34 +23,95 @@ import {
   Line,
 } from "recharts"
 
-const dailyData = [
-  { time: "6AM", generated: 0.2, consumed: 0.5, exported: 0 },
-  { time: "8AM", generated: 1.5, consumed: 1.2, exported: 0.3 },
-  { time: "10AM", generated: 3.8, consumed: 0.8, exported: 3.0 },
-  { time: "12PM", generated: 4.5, consumed: 1.0, exported: 3.5 },
-  { time: "2PM", generated: 4.2, consumed: 0.9, exported: 3.3 },
-  { time: "4PM", generated: 2.8, consumed: 1.5, exported: 1.3 },
-  { time: "6PM", generated: 0.8, consumed: 2.5, exported: 0 },
-  { time: "8PM", generated: 0, consumed: 2.0, exported: 0 },
-]
+type DashboardResponse = {
+  readings: MeterReading[]
+  monthly: MonthlyBillingSummary[]
+  totals: {
+    kWhGenerated: number
+    kWhExported: number
+    kWhImported: number
+    netKWh: number
+    amountDue: number
+    credit: number
+  }
+}
 
-const monthlyData = [
-  { month: "Jul", generated: 420, consumed: 380, exported: 120, savings: 15000 },
-  { month: "Aug", generated: 450, consumed: 390, exported: 140, savings: 17000 },
-  { month: "Sep", generated: 480, consumed: 400, exported: 160, savings: 19500 },
-  { month: "Oct", generated: 520, consumed: 410, exported: 180, savings: 22000 },
-  { month: "Nov", generated: 490, consumed: 420, exported: 150, savings: 18500 },
-  { month: "Dec", generated: 460, consumed: 430, exported: 110, savings: 13500 },
-  { month: "Jan", generated: 510, consumed: 400, exported: 170, savings: 21000 },
-]
+const DEFAULT_DASHBOARD: DashboardResponse = {
+  readings: [],
+  monthly: [],
+  totals: {
+    kWhGenerated: 0,
+    kWhExported: 0,
+    kWhImported: 0,
+    netKWh: 0,
+    amountDue: 0,
+    credit: 0,
+  },
+}
+
+const CUSTOMER_ID = "CUST-001"
 
 export default function EnergyPage() {
+  const [dashboard, setDashboard] = useState<DashboardResponse>(DEFAULT_DASHBOARD)
   const [period, setPeriod] = useState("today")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const totalGenerated = monthlyData.reduce((sum, m) => sum + m.generated, 0)
-  const totalExported = monthlyData.reduce((sum, m) => sum + m.exported, 0)
-  const totalSavings = monthlyData.reduce((sum, m) => sum + m.savings, 0)
-  const co2Prevented = (totalGenerated * 0.85).toFixed(0)
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const response = await fetch(`/api/iot/measurements?customerId=${CUSTOMER_ID}&limit=60`)
+        if (!response.ok) {
+          throw new Error("Unable to load meter readings")
+        }
+        const data: DashboardResponse = await response.json()
+        setDashboard(data)
+      } catch (err) {
+        console.error(err)
+        setError("We could not load your latest meter readings. Please try again in a moment.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadDashboard()
+  }, [])
+
+  const productionSeries = useMemo(
+    () =>
+      dashboard.readings
+        .slice()
+        .reverse()
+        .map((reading) => ({
+          time: new Date(reading.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          generated: Number(reading.kWhGenerated.toFixed(2)),
+          exported: Number(reading.kWhExported.toFixed(2)),
+        })),
+    [dashboard.readings],
+  )
+
+  const monthlySeries = useMemo(
+    () =>
+      dashboard.monthly.map((summary) => ({
+        month: `${summary.month} ${String(summary.year).slice(-2)}`,
+        generated: Number(summary.kWhGenerated.toFixed(2)),
+        imported: Number(summary.kWhImported.toFixed(2)),
+        exported: Number(summary.kWhExported.toFixed(2)),
+        savings: Math.max(summary.credit - summary.amountDue, 0),
+        net: Number(summary.netKWh.toFixed(2)),
+      })),
+    [dashboard.monthly],
+  )
+
+  const displayedProduction = useMemo(() => {
+    const limit = period === "today" ? 8 : period === "week" ? 14 : productionSeries.length
+    return productionSeries.slice(-limit)
+  }, [period, productionSeries])
+
+  const co2Prevented = (dashboard.totals.kWhGenerated * 0.85).toFixed(0)
+  const netBalance = dashboard.totals.credit - dashboard.totals.amountDue
+  const recentReadings = dashboard.readings.slice(0, 6)
+  const billingHighlight = dashboard.monthly.slice(-3).reverse()
 
   return (
     <DashboardLayout>
@@ -59,33 +121,47 @@ export default function EnergyPage() {
             <h1 className="text-2xl font-bold text-foreground">Energy Dashboard</h1>
             <p className="text-muted-foreground">Monitor your solar energy production and consumption</p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant={period === "today" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("today")}
-              className={period === "today" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
-            >
-              Today
-            </Button>
-            <Button
-              variant={period === "week" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("week")}
-              className={period === "week" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
-            >
-              Week
-            </Button>
-            <Button
-              variant={period === "month" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod("month")}
-              className={period === "month" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
-            >
-              Month
-            </Button>
+          <div className="flex items-center gap-3">
+            {loading && (
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Syncing latest readings...
+              </span>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant={period === "today" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriod("today")}
+                className={period === "today" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
+              >
+                Today
+              </Button>
+              <Button
+                variant={period === "week" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriod("week")}
+                className={period === "week" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
+              >
+                Week
+              </Button>
+              <Button
+                variant={period === "month" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriod("month")}
+                className={period === "month" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-transparent"}
+              >
+                Month
+              </Button>
+            </div>
           </div>
         </div>
+
+        {error && (
+          <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -93,10 +169,10 @@ export default function EnergyPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Generated</p>
-                  <p className="text-2xl font-bold text-foreground">{totalGenerated} kWh</p>
+                  <p className="text-2xl font-bold text-foreground">{dashboard.totals.kWhGenerated.toFixed(1)} kWh</p>
                   <p className="text-xs text-emerald-500 flex items-center gap-1">
                     <TrendingUp className="w-3 h-3" />
-                    +12% from last period
+                    Live from IoT meter
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center">
@@ -110,10 +186,10 @@ export default function EnergyPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Grid Export</p>
-                  <p className="text-2xl font-bold text-emerald-500">{totalExported} kWh</p>
+                  <p className="text-2xl font-bold text-emerald-500">{dashboard.totals.kWhExported.toFixed(1)} kWh</p>
                   <p className="text-xs text-emerald-500 flex items-center gap-1">
                     <TrendingUp className="w-3 h-3" />
-                    +8% from last period
+                    Verified device posts
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
@@ -126,11 +202,13 @@ export default function EnergyPage() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Savings</p>
-                  <p className="text-2xl font-bold text-foreground">LKR {totalSavings.toLocaleString()}</p>
-                  <p className="text-xs text-emerald-500 flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3" />
-                    +15% from last period
+                  <p className="text-sm text-muted-foreground">Net Balance</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {netBalance >= 0 ? `+LKR ${netBalance.toLocaleString()}` : `-LKR ${Math.abs(netBalance).toLocaleString()}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="w-3 h-3" />
+                    {netBalance >= 0 ? "Estimated credit" : "Estimated due"}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center">
@@ -166,12 +244,12 @@ export default function EnergyPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-foreground">Energy Production</CardTitle>
-                <CardDescription>Solar generation throughout the day</CardDescription>
+                <CardDescription>Solar generation and grid export</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailyData}>
+                    <AreaChart data={displayedProduction} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} unit=" kWh" />
@@ -188,7 +266,7 @@ export default function EnergyPage() {
                         dataKey="generated"
                         stroke="#f59e0b"
                         fill="#f59e0b"
-                        fillOpacity={0.3}
+                        fillOpacity={0.25}
                         name="Generated"
                       />
                       <Area
@@ -196,7 +274,7 @@ export default function EnergyPage() {
                         dataKey="exported"
                         stroke="#10b981"
                         fill="#10b981"
-                        fillOpacity={0.3}
+                        fillOpacity={0.2}
                         name="Exported"
                       />
                     </AreaChart>
@@ -210,12 +288,12 @@ export default function EnergyPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-foreground">Generation vs Consumption</CardTitle>
-                <CardDescription>Compare your solar generation with household consumption</CardDescription>
+                <CardDescription>Based on verified device meter readings</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyData}>
+                    <BarChart data={monthlySeries}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} unit=" kWh" />
@@ -228,7 +306,8 @@ export default function EnergyPage() {
                         }}
                       />
                       <Bar dataKey="generated" fill="#f59e0b" name="Generated" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="consumed" fill="#06b6d4" name="Consumed" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="imported" fill="#06b6d4" name="Imported" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="exported" fill="#10b981" name="Exported" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -240,12 +319,12 @@ export default function EnergyPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-foreground">Monthly Savings</CardTitle>
-                <CardDescription>Track your electricity bill savings over time</CardDescription>
+                <CardDescription>Net billing credits from meter readings</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={monthlyData}>
+                    <LineChart data={monthlySeries}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
@@ -256,7 +335,7 @@ export default function EnergyPage() {
                           borderRadius: "8px",
                           color: "hsl(var(--foreground))",
                         }}
-                        formatter={(value: number) => [`LKR ${value.toLocaleString()}`, "Savings"]}
+                        formatter={(value: number) => [`LKR ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, "Savings"]}
                       />
                       <Line
                         type="monotone"
@@ -282,23 +361,104 @@ export default function EnergyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="text-muted-foreground">System Capacity</span>
-                <span className="font-semibold text-foreground">5 kW</span>
+                <span className="text-muted-foreground">Inverter Output</span>
+                <span className="font-semibold text-emerald-500">{dashboard.readings[0]?.kWhGenerated.toFixed(1) ?? "-"} kWh</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="text-muted-foreground">Current Output</span>
-                <span className="font-semibold text-emerald-500">3.2 kW</span>
+                <span className="text-muted-foreground">Grid Export Today</span>
+                <span className="font-semibold text-foreground">{dashboard.totals.kWhExported.toFixed(1)} kWh</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="text-muted-foreground">Efficiency</span>
-                <span className="font-semibold text-foreground">94%</span>
+                <span className="text-muted-foreground">Grid Import Today</span>
+                <span className="font-semibold text-foreground">{dashboard.totals.kWhImported.toFixed(1)} kWh</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                 <span className="text-muted-foreground">Status</span>
                 <Badge className="bg-emerald-500/10 text-emerald-600" variant="secondary">
-                  Optimal
+                  IoT feed healthy
                 </Badge>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Billing Impact</CardTitle>
+              <CardDescription>Monthly bills calculated from meter readings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {billingHighlight.length === 0 && <p className="text-sm text-muted-foreground">No billing cycles yet.</p>}
+              {billingHighlight.map((summary) => (
+                <div key={`${summary.year}-${summary.month}`} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{`${summary.month} ${summary.year}`}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Net {summary.netKWh >= 0 ? `${summary.netKWh.toFixed(1)} kWh imported` : `${Math.abs(summary.netKWh).toFixed(1)} kWh exported`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {summary.credit > 0 ? (
+                      <p className="text-sm font-semibold text-emerald-500">Credit LKR {summary.credit.toLocaleString()}</p>
+                    ) : (
+                      <p className="text-sm font-semibold text-foreground">Due LKR {summary.amountDue.toLocaleString()}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Gen {summary.kWhGenerated.toFixed(1)} | Exp {summary.kWhExported.toFixed(1)} | Imp {summary.kWhImported.toFixed(1)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card className="xl:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-foreground">Recent Meter Readings</CardTitle>
+              <CardDescription>Latest data received from your device token</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {recentReadings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No readings received yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Generated</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Exported</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Imported</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Voltage</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Current</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentReadings.map((reading) => (
+                        <tr key={reading.id} className="border-b border-border hover:bg-muted/50">
+                          <td className="py-3 px-4 text-foreground">
+                            <p className="font-medium">
+                              {new Date(reading.timestamp).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Device {reading.deviceId}</p>
+                          </td>
+                          <td className="py-3 px-4 text-right text-foreground">{reading.kWhGenerated.toFixed(1)} kWh</td>
+                          <td className="py-3 px-4 text-right text-emerald-500">{reading.kWhExported.toFixed(1)} kWh</td>
+                          <td className="py-3 px-4 text-right text-foreground">{reading.kWhImported.toFixed(1)} kWh</td>
+                          <td className="py-3 px-4 text-right text-foreground">{reading.voltage?.toFixed(1) ?? "-"} V</td>
+                          <td className="py-3 px-4 text-right text-foreground">{reading.current?.toFixed(1) ?? "-"} A</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -308,35 +468,27 @@ export default function EnergyPage() {
               <CardDescription>Latest energy events</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                { time: "Today 2:30 PM", event: "Peak generation reached", value: "4.8 kW", type: "success" },
-                { time: "Today 10:00 AM", event: "Grid export started", value: "2.5 kWh", type: "info" },
-                { time: "Yesterday", event: "Daily generation", value: "18.5 kWh", type: "default" },
-                { time: "Jan 20", event: "Monthly bill credit", value: "LKR 8,500", type: "success" },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        activity.type === "success"
-                          ? "bg-emerald-500"
-                          : activity.type === "info"
-                            ? "bg-cyan-500"
-                            : "bg-muted-foreground"
-                      }`}
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{activity.event}</p>
-                      <p className="text-xs text-muted-foreground">{activity.time}</p>
+              {recentReadings.length === 0 && <p className="text-sm text-muted-foreground">Waiting for device data.</p>}
+              {recentReadings.map((reading) => {
+                const exported = reading.kWhExported > 0
+                const time = new Date(reading.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                return (
+                  <div key={`${reading.id}-activity`} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${exported ? "bg-emerald-500" : "bg-cyan-500"}`} />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {exported ? "Grid export recorded" : "Energy imported"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{time}</p>
+                      </div>
                     </div>
+                    <span className={`text-sm font-semibold ${exported ? "text-emerald-500" : "text-foreground"}`}>
+                      {exported ? `${reading.kWhExported.toFixed(1)} kWh` : `${reading.kWhImported.toFixed(1)} kWh`}
+                    </span>
                   </div>
-                  <span
-                    className={`text-sm font-semibold ${activity.type === "success" ? "text-emerald-500" : "text-foreground"}`}
-                  >
-                    {activity.value}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </CardContent>
           </Card>
         </div>

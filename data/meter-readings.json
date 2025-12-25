@@ -1,0 +1,67 @@
+[
+  {
+    "id": "MR-202501-001",
+    "customerId": "CUST-001",
+    "applicationId": "APP-001",
+    "deviceId": "DEV-ALPHA",
+    "kWhGenerated": 14.2,
+    "kWhExported": 4.5,
+    "kWhImported": 5.6,
+    "voltage": 231.2,
+    "current": 8.3,
+    "timestamp": "2025-01-30T06:45:00Z",
+    "createdAt": "2025-01-30T06:45:10Z"
+  },
+  {
+    "id": "MR-202501-002",
+    "customerId": "CUST-001",
+    "applicationId": "APP-001",
+    "deviceId": "DEV-ALPHA",
+    "kWhGenerated": 16.5,
+    "kWhExported": 6.2,
+    "kWhImported": 4.1,
+    "voltage": 230.8,
+    "current": 8.9,
+    "timestamp": "2025-01-31T06:40:00Z",
+    "createdAt": "2025-01-31T06:40:08Z"
+  },
+  {
+    "id": "MR-202502-001",
+    "customerId": "CUST-001",
+    "applicationId": "APP-001",
+    "deviceId": "DEV-ALPHA",
+    "kWhGenerated": 15.1,
+    "kWhExported": 5.1,
+    "kWhImported": 5.8,
+    "voltage": 229.9,
+    "current": 8.5,
+    "timestamp": "2025-02-01T06:50:00Z",
+    "createdAt": "2025-02-01T06:50:06Z"
+  },
+  {
+    "id": "MR-202502-002",
+    "customerId": "CUST-001",
+    "applicationId": "APP-001",
+    "deviceId": "DEV-ALPHA",
+    "kWhGenerated": 17.4,
+    "kWhExported": 6.9,
+    "kWhImported": 4.3,
+    "voltage": 230.2,
+    "current": 9.1,
+    "timestamp": "2025-02-02T06:55:00Z",
+    "createdAt": "2025-02-02T06:55:05Z"
+  },
+  {
+    "id": "MR-202502-003",
+    "customerId": "CUST-001",
+    "applicationId": "APP-001",
+    "deviceId": "DEV-ALPHA",
+    "kWhGenerated": 18.1,
+    "kWhExported": 7.4,
+    "kWhImported": 4.0,
+    "voltage": 231.5,
+    "current": 9.4,
+    "timestamp": "2025-02-03T07:00:00Z",
+    "createdAt": "2025-02-03T07:00:04Z"
+  }
+]
