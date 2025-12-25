@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,94 +32,38 @@ import {
   Ban,
   CheckCircle,
 } from "lucide-react"
+import { fetchUsers, type User } from "@/lib/auth"
 
-interface UserData {
-  id: string
-  name: string
-  email: string
-  phone: string
-  role: "customer" | "installer" | "officer"
-  status: "active" | "inactive" | "suspended"
-  createdAt: string
-  lastLogin?: string
-  applications?: number
-  installations?: number
-}
-
-const demoUsers: UserData[] = [
-  {
-    id: "USR-001",
-    name: "John Silva",
-    email: "john.silva@email.com",
-    phone: "+94 77 123 4567",
-    role: "customer",
-    status: "active",
-    createdAt: "2024-01-01",
-    lastLogin: "2024-01-20",
-    applications: 2,
-  },
-  {
-    id: "USR-002",
-    name: "Maria Fernando",
-    email: "maria.f@email.com",
-    phone: "+94 71 234 5678",
-    role: "customer",
-    status: "active",
-    createdAt: "2024-01-05",
-    lastLogin: "2024-01-19",
-    applications: 1,
-  },
-  {
-    id: "USR-003",
-    name: "SunPower Systems",
-    email: "info@sunpower.lk",
-    phone: "+94 11 234 5678",
-    role: "installer",
-    status: "active",
-    createdAt: "2023-12-15",
-    lastLogin: "2024-01-20",
-    installations: 15,
-  },
-  {
-    id: "USR-004",
-    name: "Green Solar Co",
-    email: "contact@greensolar.lk",
-    phone: "+94 11 345 6789",
-    role: "installer",
-    status: "active",
-    createdAt: "2023-11-20",
-    lastLogin: "2024-01-18",
-    installations: 22,
-  },
-  {
-    id: "USR-005",
-    name: "David Perera",
-    email: "david.p@email.com",
-    phone: "+94 76 345 6789",
-    role: "customer",
-    status: "suspended",
-    createdAt: "2024-01-10",
-    applications: 0,
-  },
-  {
-    id: "USR-006",
-    name: "Officer Admin",
-    email: "admin@ceb.lk",
-    phone: "+94 11 456 7890",
-    role: "officer",
-    status: "active",
-    createdAt: "2023-01-01",
-    lastLogin: "2024-01-20",
-  },
-]
+type UserData = User & { status: "active" | "inactive" | "suspended" }
 
 export default function OfficerUsersPage() {
-  const [users, setUsers] = useState<UserData[]>(demoUsers)
+  const [users, setUsers] = useState<UserData[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [actionDialogOpen, setActionDialogOpen] = useState(false)
   const [actionType, setActionType] = useState<"suspend" | "activate">("suspend")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await fetchUsers()
+        setUsers(
+          data.map((user) => ({
+            ...user,
+            status: user.verified === false ? "suspended" : "active",
+          })),
+        )
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load users")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const customers = users.filter((u) => u.role === "customer")
   const installers = users.filter((u) => u.role === "installer")
@@ -199,45 +143,43 @@ export default function OfficerUsersPage() {
         <Button
           variant="outline"
           size="sm"
+          className="bg-transparent"
           onClick={() => {
             setSelectedUser(user)
             setDetailsOpen(true)
           }}
         >
-          <Eye className="w-4 h-4" />
+          <Eye className="w-4 h-4 mr-2" />
+          View
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="icon">
               <MoreVertical className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {user.status === "active" ? (
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedUser(user)
-                  setActionType("suspend")
-                  setActionDialogOpen(true)
-                }}
-                className="text-red-600"
-              >
-                <Ban className="w-4 h-4 mr-2" />
-                Suspend User
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedUser(user)
-                  setActionType("activate")
-                  setActionDialogOpen(true)
-                }}
-                className="text-emerald-600"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Activate User
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem
+              onClick={() => {
+                setSelectedUser(user)
+                setActionType("activate")
+                setActionDialogOpen(true)
+              }}
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              Activate
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => {
+                setSelectedUser(user)
+                setActionType("suspend")
+                setActionDialogOpen(true)
+              }}
+            >
+              <UserX className="w-4 h-4 mr-2" />
+              Suspend
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -247,207 +189,173 @@ export default function OfficerUsersPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-muted-foreground">Manage customers, installers, and system users</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+            <p className="text-muted-foreground">Manage customers, installers, and officers</p>
+          </div>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 bg-background"
+            />
+          </div>
+        </div>
+        {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Users className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Customers</p>
+                  <p className="text-lg font-bold text-foreground">{customers.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Building className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Installers</p>
+                  <p className="text-lg font-bold text-foreground">{installers.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Officers</p>
+                  <p className="text-lg font-bold text-foreground">{officers.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="border-emerald-500/20 bg-emerald-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Customers</p>
-                  <p className="text-2xl font-bold text-emerald-600">{customers.length}</p>
-                </div>
-                <Users className="w-8 h-8 text-emerald-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-amber-500/20 bg-amber-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Installers</p>
-                  <p className="text-2xl font-bold text-amber-600">{installers.length}</p>
-                </div>
-                <Building className="w-8 h-8 text-amber-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-blue-500/20 bg-blue-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Officers</p>
-                  <p className="text-2xl font-bold text-blue-600">{officers.length}</p>
-                </div>
-                <Shield className="w-8 h-8 text-blue-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-red-500/20 bg-red-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Suspended</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {users.filter((u) => u.status === "suspended").length}
-                  </p>
-                </div>
-                <UserX className="w-8 h-8 text-red-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search users by name, email, or ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-background"
-          />
-        </div>
-
-        {/* Tabs */}
         <Tabs defaultValue="customers">
-          <TabsList className="bg-muted">
-            <TabsTrigger value="customers">Customers ({customers.length})</TabsTrigger>
-            <TabsTrigger value="installers">Installers ({installers.length})</TabsTrigger>
-            <TabsTrigger value="officers">Officers ({officers.length})</TabsTrigger>
+          <TabsList>
+            <TabsTrigger value="customers">Customers</TabsTrigger>
+            <TabsTrigger value="installers">Installers</TabsTrigger>
+            <TabsTrigger value="officers">Officers</TabsTrigger>
           </TabsList>
 
           <TabsContent value="customers" className="mt-4 space-y-3">
-            {filteredUsers(customers).map((user) => (
-              <UserCard key={user.id} user={user} />
-            ))}
+            {loading ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">Loading users...</CardContent>
+              </Card>
+            ) : (
+              filteredUsers(customers).map((user) => <UserCard key={user.id} user={user} />)
+            )}
           </TabsContent>
-
           <TabsContent value="installers" className="mt-4 space-y-3">
-            {filteredUsers(installers).map((user) => (
-              <UserCard key={user.id} user={user} />
-            ))}
+            {loading ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">Loading users...</CardContent>
+              </Card>
+            ) : (
+              filteredUsers(installers).map((user) => <UserCard key={user.id} user={user} />)
+            )}
           </TabsContent>
-
           <TabsContent value="officers" className="mt-4 space-y-3">
-            {filteredUsers(officers).map((user) => (
-              <UserCard key={user.id} user={user} />
-            ))}
+            {loading ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">Loading users...</CardContent>
+              </Card>
+            ) : (
+              filteredUsers(officers).map((user) => <UserCard key={user.id} user={user} />)
+            )}
           </TabsContent>
         </Tabs>
 
-        {/* User Details Dialog */}
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>User Details</DialogTitle>
+              <DialogDescription>Profile and activity for the selected user.</DialogDescription>
             </DialogHeader>
             {selectedUser && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <Avatar className="w-16 h-16">
-                    <AvatarFallback
-                      className={`text-white text-xl ${
-                        selectedUser.role === "customer"
-                          ? "bg-emerald-500"
-                          : selectedUser.role === "installer"
-                            ? "bg-amber-500"
-                            : "bg-blue-500"
-                      }`}
-                    >
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-12 h-12">
+                    <AvatarFallback className="bg-emerald-500 text-white">
                       {selectedUser.name.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-lg font-bold text-foreground">{selectedUser.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <p className="font-semibold text-foreground">{selectedUser.name}</p>
+                    <div className="flex items-center gap-2">
                       {getRoleBadge(selectedUser.role)}
                       {getStatusBadge(selectedUser.status)}
                     </div>
                   </div>
                 </div>
-
-                <div className="space-y-3 p-4 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground">{selectedUser.email}</span>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Mail className="w-4 h-4" />
+                    <span className="text-foreground">{selectedUser.email}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground">{selectedUser.phone}</span>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Phone className="w-4 h-4" />
+                    <span className="text-foreground">{selectedUser.phone || "N/A"}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground">Joined: {selectedUser.createdAt}</span>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="w-4 h-4" />
+                    <span className="text-foreground">
+                      Created: {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : "N/A"}
+                    </span>
                   </div>
-                  {selectedUser.lastLogin && (
-                    <div className="flex items-center gap-3">
-                      <UserCheck className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-foreground">Last login: {selectedUser.lastLogin}</span>
+                  {selectedUser.organization && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Building className="w-4 h-4" />
+                      <span className="text-foreground">
+                        {selectedUser.organization.name} {selectedUser.organization ? "(Org)" : ""}
+                      </span>
                     </div>
                   )}
                 </div>
-
-                {selectedUser.role === "customer" && selectedUser.applications !== undefined && (
-                  <div className="p-4 bg-emerald-500/10 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Total Applications</p>
-                    <p className="text-2xl font-bold text-emerald-600">{selectedUser.applications}</p>
-                  </div>
-                )}
-
-                {selectedUser.role === "installer" && selectedUser.installations !== undefined && (
-                  <div className="p-4 bg-amber-500/10 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Completed Installations</p>
-                    <p className="text-2xl font-bold text-amber-600">{selectedUser.installations}</p>
-                  </div>
-                )}
               </div>
             )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Action Confirmation Dialog */}
         <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{actionType === "suspend" ? "Suspend User" : "Activate User"}</DialogTitle>
               <DialogDescription>
                 {actionType === "suspend"
-                  ? "This will prevent the user from accessing the system."
-                  : "This will restore the user's access to the system."}
+                  ? "Suspended users cannot access the portal until reactivated."
+                  : "Activate this account to restore access."}
               </DialogDescription>
             </DialogHeader>
-            {selectedUser && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="font-medium text-foreground">{selectedUser.name}</p>
-                <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
-              </div>
-            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleAction}
-                className={
-                  actionType === "suspend" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"
-                }
-              >
-                {actionType === "suspend" ? (
-                  <>
-                    <Ban className="w-4 h-4 mr-2" />
-                    Suspend
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Activate
-                  </>
-                )}
+              <Button onClick={handleAction} className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                {actionType === "suspend" ? "Suspend" : "Activate"}
               </Button>
             </DialogFooter>
           </DialogContent>

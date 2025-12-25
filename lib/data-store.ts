@@ -53,9 +53,7 @@ async function ensureDatabase() {
   try {
     await fs.access(dbPath)
     return
-  } catch {
-    // fall through to create the seed data
-  }
+  } catch {}
 
   await fs.mkdir(dataDir, { recursive: true })
 

@@ -8,11 +8,16 @@ export interface User {
   verified?: boolean
   phone?: string
   address?: string
-  organizationId?: string
+  createdAt?: string
+  organization?: {
+    id: string
+    name: string
+  } | null
 }
 
 export interface Application {
   id: string
+  reference?: string
   customerId: string
   customerName: string
   status:
@@ -33,24 +38,16 @@ export interface Application {
   updatedAt: string
   siteVisitDate?: string
   rejectionReason?: string
-  documents: {
-    nic?: string
-    bankDetails?: string
-    electricityBill?: string
-  }
-  technicalDetails: {
-    roofType: string
-    roofArea: string
-    monthlyConsumption: string
-    connectionPhase: string
-  }
+  documents: Record<string, string>
+  technicalDetails: Record<string, string>
   selectedInstaller?: {
     id: string
     name: string
-    packageName: string
-    price: number
+    packageName?: string
+    price?: number
   }
   bidId?: string
+  invoices?: Invoice[]
 }
 
 export interface Installer {
@@ -109,6 +106,7 @@ export interface Invoice {
   id: string
   applicationId: string
   customerId: string
+  customerName?: string
   type: "authority_fee" | "installation" | "monthly_bill"
   amount: number
   status: "pending" | "paid" | "overdue"
@@ -122,143 +120,116 @@ export interface MonthlyBill {
   id: string
   customerId: string
   applicationId: string
-  month: string
+  month: number
   year: number
   kwhGenerated: number
   kwhExported: number
   kwhImported: number
   amount: number
-  status: "pending" | "paid"
+  status: "pending" | "paid" | "overdue"
   createdAt: string
 }
 
-// Demo data helpers
-export function getDemoApplications(): Application[] {
-  return [
-    {
-      id: "APP-001",
-      customerId: "CUST-001",
-      customerName: "John Customer",
-      status: "approved",
-      createdAt: "2024-01-15",
-      updatedAt: "2024-01-20",
-      documents: {
-        nic: "nic.pdf",
-        bankDetails: "bank.pdf",
-        electricityBill: "bill.pdf",
-      },
-      technicalDetails: {
-        roofType: "Flat Concrete",
-        roofArea: "50 sqm",
-        monthlyConsumption: "350 kWh",
-        connectionPhase: "Single Phase",
-      },
-    },
-    {
-      id: "APP-002",
-      customerId: "CUST-002",
-      customerName: "Jane Smith",
-      status: "pending",
-      createdAt: "2024-01-18",
-      updatedAt: "2024-01-18",
-      documents: {
-        nic: "nic.pdf",
-        bankDetails: "bank.pdf",
-        electricityBill: "bill.pdf",
-      },
-      technicalDetails: {
-        roofType: "Sloped Tile",
-        roofArea: "75 sqm",
-        monthlyConsumption: "500 kWh",
-        connectionPhase: "Three Phase",
-      },
-    },
-  ]
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    const message = (data as any)?.error || response.statusText
+    throw new Error(message || "Request failed")
+  }
+
+  return response.json() as Promise<T>
 }
 
-export function getDemoInstallers(): Installer[] {
-  return [
-    {
-      id: "INS-001",
-      companyName: "Solar Pro Ltd",
-      email: "contact@solarpro.lk",
-      phone: "+94 11 234 5678",
-      address: "123 Solar Street, Colombo",
-      description: "Leading solar installation company with 10+ years experience",
-      registrationNumber: "REG-2024-001",
-      verified: true,
-      verifiedAt: "2024-01-10",
-      documents: ["cert.pdf", "license.pdf"],
-      rating: 4.8,
-      completedInstallations: 150,
-      packages: [
-        {
-          id: "PKG-001",
-          installerId: "INS-001",
-          name: "Basic Solar Package",
-          capacity: "3 kW",
-          panelCount: 8,
-          panelType: "Monocrystalline",
-          inverterBrand: "Huawei",
-          warranty: "10 years",
-          price: 450000,
-          features: ["Free installation", "1 year maintenance", "Net metering setup"],
-        },
-        {
-          id: "PKG-002",
-          installerId: "INS-001",
-          name: "Premium Solar Package",
-          capacity: "5 kW",
-          panelCount: 12,
-          panelType: "Monocrystalline",
-          inverterBrand: "SMA",
-          warranty: "15 years",
-          price: 750000,
-          features: ["Free installation", "2 years maintenance", "Net metering setup", "Monitoring system"],
-        },
-      ],
-    },
-    {
-      id: "INS-002",
-      companyName: "Green Energy Solutions",
-      email: "info@greenenergy.lk",
-      phone: "+94 11 345 6789",
-      address: "456 Energy Lane, Kandy",
-      description: "Eco-friendly solar solutions for residential and commercial",
-      registrationNumber: "REG-2024-002",
-      verified: true,
-      verifiedAt: "2024-01-12",
-      documents: ["cert.pdf"],
-      rating: 4.6,
-      completedInstallations: 95,
-      packages: [
-        {
-          id: "PKG-003",
-          installerId: "INS-002",
-          name: "Economy Package",
-          capacity: "2 kW",
-          panelCount: 5,
-          panelType: "Polycrystalline",
-          inverterBrand: "Growatt",
-          warranty: "8 years",
-          price: 280000,
-          features: ["Free installation", "Net metering setup"],
-        },
-      ],
-    },
-    {
-      id: "INS-003",
-      companyName: "SunPower Systems",
-      email: "hello@sunpower.lk",
-      phone: "+94 11 456 7890",
-      address: "789 Renewable Road, Galle",
-      description: "Premium solar installations with cutting-edge technology",
-      registrationNumber: "REG-2024-003",
-      verified: false,
-      documents: ["cert.pdf", "license.pdf"],
-      rating: 0,
-      completedInstallations: 0,
-      packages: [],
-    },
-  ]
+export async function fetchCurrentUser(): Promise<User | null> {
+  const response = await fetch("/api/auth/me", { cache: "no-store" })
+  if (response.status === 401) return null
+  const data = await handleResponse<{ user: User }>(response)
+  return data.user
+}
+
+export async function login(payload: { email: string; password: string }) {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await handleResponse<{ user: User }>(response)
+  return data.user
+}
+
+export async function register(payload: {
+  role: UserRole
+  email: string
+  password: string
+  name: string
+  phone?: string
+  address?: string
+  companyName?: string
+  registrationNumber?: string
+  description?: string
+}) {
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await handleResponse<{ user: User }>(response)
+  return data.user
+}
+
+export async function logout() {
+  await fetch("/api/auth/logout", { method: "POST" })
+}
+
+export async function fetchApplications(): Promise<Application[]> {
+  const response = await fetch("/api/applications", { cache: "no-store" })
+  const data = await handleResponse<{ applications: Application[] }>(response)
+  return data.applications
+}
+
+export async function fetchApplication(
+  reference: string
+): Promise<Application | null> {
+  const response = await fetch(`/api/applications/${reference}`, {
+    cache: "no-store",
+  })
+  if (response.status === 404) return null
+  const data = await handleResponse<{ application: Application }>(response)
+  return data.application
+}
+
+export async function fetchInstallers(
+  verifiedOnly = true
+): Promise<Installer[]> {
+  const url = verifiedOnly
+    ? "/api/installers?verified=true"
+    : "/api/installers"
+
+  const response = await fetch(url, { cache: "no-store" })
+  const data = await handleResponse<{ installers: Installer[] }>(response)
+  return data.installers
+}
+
+export async function fetchBidSessions(): Promise<BidSession[]> {
+  const response = await fetch("/api/bids", { cache: "no-store" })
+  const data = await handleResponse<{ bidSessions: BidSession[] }>(response)
+  return data.bidSessions
+}
+
+export async function fetchPayments(): Promise<{
+  invoices: Invoice[]
+  monthlyBills: MonthlyBill[]
+}> {
+  const response = await fetch("/api/payments", { cache: "no-store" })
+  const data = await handleResponse<{
+    invoices: Invoice[]
+    monthlyBills: MonthlyBill[]
+  }>(response)
+  return data
+}
+
+export async function fetchUsers(): Promise<User[]> {
+  const response = await fetch("/api/users", { cache: "no-store" })
+  const data = await handleResponse<{ users: User[] }>(response)
+  return data.users
 }

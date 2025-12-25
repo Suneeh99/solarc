@@ -1,141 +1,103 @@
 import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
-import type { User } from "@/lib/auth"
+import crypto from "crypto"
+import { prisma } from "./prisma"
+import type { Session, User } from "@prisma/client"
 
-const SESSION_COOKIE_NAME = "solar_session"
-const SESSION_EXPIRY_HOURS = 12
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
+const SESSION_COOKIE = "session_token"
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
-interface SessionPayload {
-  sub: string
-  email: string
-  name: string
-  role: User["role"]
-  organizationId?: string
-  verified?: boolean
-  exp: number
-}
-
-function getSecretBytes() {
-  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "dev-secret"
-  return encoder.encode(secret)
-}
-
-function toBase64(bytes: Uint8Array) {
-  if (typeof btoa !== "undefined") {
-    let binary = ""
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte)
-    })
-    return btoa(binary)
+export type SessionWithUser = Session & {
+  user: User & {
+    organization: { id: string; name: string } | null
   }
-
-  // Node.js fallback
-  return Buffer.from(bytes).toString("base64")
 }
 
-function fromBase64(base64: string) {
-  if (typeof atob !== "undefined") {
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-    return bytes
+export function serializeUser(
+  user: User & { organization?: { id: string; name: string } | null },
+) {
+  const { passwordHash: _passwordHash, ...safeUser } = user
+
+  return {
+    ...safeUser,
+    organization: user.organization
+      ? { id: user.organization.id, name: user.organization.name }
+      : null,
   }
-
-  return new Uint8Array(Buffer.from(base64, "base64"))
 }
 
-function base64UrlEncodeFromString(input: string) {
-  const base64 = toBase64(encoder.encode(input))
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-}
-
-function base64UrlEncodeFromBytes(bytes: Uint8Array) {
-  const base64 = toBase64(bytes)
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-}
-
-function base64UrlDecodeToString(input: string) {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (input.length % 4)) % 4)
-  return decoder.decode(fromBase64(normalized))
-}
-
-async function signSegment(segment: string) {
-  const cryptoObj = globalThis.crypto
-  const key = await cryptoObj.subtle.importKey("raw", getSecretBytes(), { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-  ])
-  const signature = await cryptoObj.subtle.sign("HMAC", key, encoder.encode(segment))
-  return base64UrlEncodeFromBytes(new Uint8Array(signature))
-}
-
-async function verifySignature(payloadSegment: string, signatureSegment: string) {
-  const expected = await signSegment(payloadSegment)
-  return expected === signatureSegment
-}
-
-export async function createSessionToken(user: User) {
-  const expiresAt = Date.now() + SESSION_EXPIRY_HOURS * 60 * 60 * 1000
-  const payload: SessionPayload = {
-    sub: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    organizationId: user.organizationId,
-    verified: user.verified,
-    exp: expiresAt,
-  }
-
-  const payloadSegment = base64UrlEncodeFromString(JSON.stringify(payload))
-  const signatureSegment = await signSegment(payloadSegment)
-  return `${payloadSegment}.${signatureSegment}`
-}
-
-export async function verifySessionToken(token?: string) {
+export async function getSession(): Promise<SessionWithUser | null> {
+  const token = cookies().get(SESSION_COOKIE)?.value
   if (!token) return null
-  const [payloadSegment, signatureSegment] = token.split(".")
-  if (!payloadSegment || !signatureSegment) return null
 
-  const isValid = await verifySignature(payloadSegment, signatureSegment)
-  if (!isValid) return null
+  const session = await prisma.session.findUnique({
+    where: { token },
+    include: {
+      user: {
+        include: {
+          organization: {
+            select: { id: true, name: true },
+          },
+        },
+      },
+    },
+  })
 
-  try {
-    const payload = JSON.parse(base64UrlDecodeToString(payloadSegment)) as SessionPayload
-    if (Date.now() > payload.exp) {
-      return null
-    }
-    return payload
-  } catch {
+  if (!session) {
+    cookies().delete(SESSION_COOKIE)
     return null
   }
+
+  if (session.expiresAt < new Date()) {
+    await prisma.session.delete({ where: { token } })
+    cookies().delete(SESSION_COOKIE)
+    return null
+  }
+
+  return session as SessionWithUser
 }
 
-export function attachSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set(SESSION_COOKIE_NAME, token, {
+export async function getCurrentUser() {
+  const session = await getSession()
+  return session ? serializeUser(session.user) : null
+}
+
+export async function createSession(userId: string) {
+  const token = crypto.randomUUID()
+  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
+
+  await prisma.session.create({
+    data: {
+      token,
+      userId,
+      expiresAt,
+    },
+  })
+
+  cookies().set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_MAX_AGE_SECONDS,
     path: "/",
-    maxAge: SESSION_EXPIRY_HOURS * 60 * 60,
   })
+
+  return token
 }
 
-export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set(SESSION_COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  })
+export async function clearSession() {
+  const token = cookies().get(SESSION_COOKIE)?.value
+
+  if (token) {
+    await prisma.session.deleteMany({ where: { token } })
+  }
+
+  cookies().delete(SESSION_COOKIE)
 }
 
-export function getSessionTokenFromCookies() {
-  const cookieStore = cookies()
-  return cookieStore.get(SESSION_COOKIE_NAME)?.value
+export async function requireUser() {
+  const user = await getCurrentUser()
+  if (!user) {
+    throw new Error("UNAUTHENTICATED")
+  }
+  return user
 }
-
-export { SESSION_COOKIE_NAME }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,13 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Calendar, Clock, Users, Zap, Info } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, Users, Zap, Info, Loader2 } from "lucide-react"
 import Link from "next/link"
-
-const approvedApplications = [
-  { id: "APP-001", address: "123 Solar Lane, Colombo 07", capacity: "5 kW", approvedDate: "2024-01-15" },
-  { id: "APP-004", address: "321 Energy Street, Negombo", capacity: "8 kW", approvedDate: "2024-01-12" },
-]
+import { getUser, type Application, type User } from "@/lib/auth"
 
 export default function NewBidSession() {
   const router = useRouter()
@@ -25,28 +21,76 @@ export default function NewBidSession() {
   const preSelectedInstaller = searchParams.get("installer") || ""
   const preSelectedPackage = searchParams.get("package") || ""
 
+  const [user, setUser] = useState<User | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
   const [selectedApplication, setSelectedApplication] = useState(preSelectedApp)
-  const [bidDuration, setBidDuration] = useState("7")
+  const [bidDuration, setBidDuration] = useState("2")
   const [maxBudget, setMaxBudget] = useState("")
   const [requirements, setRequirements] = useState(
     preSelectedPackage ? `Interested in package: ${preSelectedPackage}` : "",
   )
   const [bidType, setBidType] = useState<"open" | "specific">(preSelectedInstaller ? "specific" : "open")
   const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleCreateBidSession = () => {
+  useEffect(() => {
+    setUser(getUser())
+  }, [])
+
+  useEffect(() => {
+    const customerId = user?.id ?? "CUST-001"
+    const fetchApplications = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/applications?status=approved&customerId=${customerId}`)
+        if (!res.ok) throw new Error("Unable to load applications")
+        const data = await res.json()
+        setApplications(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unexpected error")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchApplications()
+  }, [user])
+
+  const handleCreateBidSession = async () => {
     if (!selectedApplication) {
       alert("Please select an application first")
       return
     }
 
-    setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false)
-      alert("Bid session created successfully! Installers will be notified.")
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/bids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: selectedApplication,
+          customerId: user?.id ?? "CUST-001",
+          durationHours: Number(bidDuration) * 24,
+          maxBudget: maxBudget ? Number(maxBudget) : undefined,
+          requirements,
+          bidType,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Unable to create bid session")
+      }
+
       router.push("/customer/bids")
-    }, 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -127,7 +171,16 @@ export default function NewBidSession() {
             <CardDescription>Choose an approved application for the bid</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {approvedApplications.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading applications...
+              </div>
+            ) : error ? (
+              <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm">
+                {error}
+              </div>
+            ) : applications.length === 0 ? (
               <div className="text-center py-6">
                 <p className="text-muted-foreground mb-4">You need an approved application to open a bid session.</p>
                 <Link href="/customer/applications/new">
@@ -135,7 +188,7 @@ export default function NewBidSession() {
                 </Link>
               </div>
             ) : (
-              approvedApplications.map((app) => (
+              applications.map((app) => (
                 <div
                   key={app.id}
                   onClick={() => setSelectedApplication(app.id)}
@@ -148,11 +201,13 @@ export default function NewBidSession() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-foreground">{app.id}</p>
-                      <p className="text-sm text-muted-foreground">{app.address}</p>
+                      <p className="text-sm text-muted-foreground">{app.siteAddress}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-emerald-500">{app.capacity}</p>
-                      <p className="text-xs text-muted-foreground">Approved {app.approvedDate}</p>
+                      <p className="font-medium text-emerald-500">{app.systemCapacity}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Approved {new Date(app.updatedAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -178,9 +233,10 @@ export default function NewBidSession() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="2">2 Days (48 hours)</SelectItem>
                   <SelectItem value="3">3 Days</SelectItem>
                   <SelectItem value="5">5 Days</SelectItem>
-                  <SelectItem value="7">7 Days (Recommended)</SelectItem>
+                  <SelectItem value="7">7 Days</SelectItem>
                   <SelectItem value="14">14 Days</SelectItem>
                 </SelectContent>
               </Select>
@@ -251,10 +307,10 @@ export default function NewBidSession() {
           </Link>
           <Button
             onClick={handleCreateBidSession}
-            disabled={!selectedApplication || loading}
+            disabled={!selectedApplication || submitting || loading}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
           >
-            {loading ? "Creating..." : "Create Bid Session"}
+            {submitting ? "Creating..." : "Create Bid Session"}
           </Button>
         </div>
       </div>
