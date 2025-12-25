@@ -15,6 +15,20 @@ export interface User {
   } | null
 }
 
+export type InstallerStatus =
+  | "pending"
+  | "verified"
+  | "rejected"
+  | "suspended"
+
+export interface DocumentMeta {
+  fileName: string
+  url: string
+  uploadedAt: string
+  mimeType?: string
+  sizeKb?: number
+}
+
 export interface Application {
   id: string
   reference?: string
@@ -36,10 +50,21 @@ export interface Application {
     | "completed"
   createdAt: string
   updatedAt: string
+  reviewedAt?: string
   siteVisitDate?: string
   rejectionReason?: string
-  documents: Record<string, string>
-  technicalDetails: Record<string, string>
+  documents: {
+    nic?: DocumentMeta
+    bankDetails?: DocumentMeta
+    electricityBill?: DocumentMeta
+    propertyDocument?: DocumentMeta
+  }
+  technicalDetails: {
+    roofType: string
+    roofArea: string
+    monthlyConsumption: string
+    connectionPhase: string
+  }
   selectedInstaller?: {
     id: string
     name: string
@@ -58,9 +83,12 @@ export interface Installer {
   address: string
   description: string
   registrationNumber: string
+  status: InstallerStatus
   verified: boolean
   verifiedAt?: string
-  documents: string[]
+  rejectionReason?: string
+  suspendedReason?: string
+  documents: DocumentMeta[]
   packages: SolarPackage[]
   rating: number
   completedInstallations: number
@@ -100,6 +128,7 @@ export interface BidSession {
   expiresAt: string
   status: "open" | "closed" | "expired"
   bids: Bid[]
+  selectedBidId?: string
 }
 
 export interface Invoice {
@@ -130,13 +159,16 @@ export interface MonthlyBill {
   createdAt: string
 }
 
+/* ------------------------------------------------------------------ */
+/* API helpers                                                          */
+/* ------------------------------------------------------------------ */
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
     const message = (data as any)?.error || response.statusText
     throw new Error(message || "Request failed")
   }
-
   return response.json() as Promise<T>
 }
 
@@ -147,7 +179,10 @@ export async function fetchCurrentUser(): Promise<User | null> {
   return data.user
 }
 
-export async function login(payload: { email: string; password: string }) {
+export async function login(payload: {
+  email: string
+  password: string
+}) {
   const response = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -188,7 +223,7 @@ export async function fetchApplications(): Promise<Application[]> {
 }
 
 export async function fetchApplication(
-  reference: string
+  reference: string,
 ): Promise<Application | null> {
   const response = await fetch(`/api/applications/${reference}`, {
     cache: "no-store",
@@ -199,7 +234,7 @@ export async function fetchApplication(
 }
 
 export async function fetchInstallers(
-  verifiedOnly = true
+  verifiedOnly = true,
 ): Promise<Installer[]> {
   const url = verifiedOnly
     ? "/api/installers?verified=true"
@@ -221,11 +256,7 @@ export async function fetchPayments(): Promise<{
   monthlyBills: MonthlyBill[]
 }> {
   const response = await fetch("/api/payments", { cache: "no-store" })
-  const data = await handleResponse<{
-    invoices: Invoice[]
-    monthlyBills: MonthlyBill[]
-  }>(response)
-  return data
+  return handleResponse(response)
 }
 
 export async function fetchUsers(): Promise<User[]> {

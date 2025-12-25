@@ -65,8 +65,10 @@ export default function ApplicationDetail() {
     async function load() {
       try {
         const app = await fetchApplication(params.id as string)
+        if (!app) {
+          setError("Application not found")
+        }
         setApplication(app)
-        if (!app) setError("Application not found")
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load application")
       } finally {
@@ -79,7 +81,9 @@ export default function ApplicationDetail() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading application...</div>
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Loading application...
+        </div>
       </DashboardLayout>
     )
   }
@@ -88,7 +92,7 @@ export default function ApplicationDetail() {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-destructive">{error || "Application not found"}</p>
+          <p className="text-destructive">{error}</p>
         </div>
       </DashboardLayout>
     )
@@ -106,7 +110,7 @@ export default function ApplicationDetail() {
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/customer/applications">
-            <Button variant="ghost" size="icon" className="bg-transparent">
+            <Button variant="ghost" size="icon">
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
@@ -118,217 +122,41 @@ export default function ApplicationDetail() {
                 {status.label}
               </Badge>
             </div>
-            <p className="text-muted-foreground">Created on {new Date(application.createdAt).toLocaleDateString()}</p>
+            <p className="text-muted-foreground">
+              Created on {new Date(application.createdAt).toLocaleDateString()}
+            </p>
           </div>
         </div>
 
-        {/* Progress Timeline */}
+        {/* Documents */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Application Progress</CardTitle>
-            <CardDescription>Track your application through each stage</CardDescription>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-500" />
+              Uploaded Documents
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <div className="flex items-center justify-between">
-                {workflowSteps.map((step, index) => {
-                  const isCompleted = index < currentStepIndex
-                  const isCurrent = index === currentStepIndex
-                  const isRejected = application.status === "rejected" && step.key === "approved"
-
-                  return (
-                    <div key={step.key} className="flex flex-col items-center relative">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                          isCompleted
-                            ? "bg-emerald-500 text-white"
-                            : isCurrent
-                              ? "bg-emerald-500 text-white ring-4 ring-emerald-500/20"
-                              : isRejected
-                                ? "bg-red-500 text-white"
-                                : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle className="w-4 h-4" />
-                        ) : isRejected ? (
-                          <AlertCircle className="w-4 h-4" />
-                        ) : (
-                          index + 1
-                        )}
-                      </div>
-                      <span
-                        className={`text-xs mt-2 text-center max-w-16 ${
-                          isCurrent ? "text-foreground font-medium" : "text-muted-foreground"
-                        }`}
-                      >
-                        {step.label}
-                      </span>
-                      {index < workflowSteps.length - 1 && (
-                        <div
-                          className={`absolute top-4 left-8 w-[calc(100%-2rem)] h-0.5 ${
-                            isCompleted ? "bg-emerald-500" : "bg-muted"
-                          }`}
-                          style={{ width: "calc(100% + 1rem)" }}
-                        />
-                      )}
-                    </div>
-                  )
-                })}
+          <CardContent className="space-y-3">
+            {Object.entries(application.documents).map(([key, file]) => (
+              <div
+                key={key}
+                className="flex items-center justify-between p-3 rounded-lg border border-border"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground capitalize">
+                    {key.replace(/([A-Z])/g, " $1").trim()}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <a href={file} target="_blank" rel="noreferrer">
+                    <Download className="w-4 h-4" />
+                  </a>
+                </Button>
               </div>
-            </div>
+            ))}
           </CardContent>
         </Card>
-
-        {/* Action Cards */}
-        {needsPayment && (
-          <Card className="border-amber-500/50 bg-amber-500/5">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                    <CreditCard className="w-6 h-6 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">Authority Fee Payment Required</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Pay the CEB authority fee to proceed with your installation
-                    </p>
-                  </div>
-                </div>
-                <Link href="/customer/invoices">
-                  <Button className="bg-amber-500 hover:bg-amber-600 text-white">Pay Now</Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {canFindInstaller && (
-          <Card className="border-emerald-500/50 bg-emerald-500/5">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Building className="w-6 h-6 text-emerald-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">Find Your Installer</h3>
-                    <p className="text-sm text-muted-foreground">Browse solar packages or open a bid for installers</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Link href="/customer/installers">
-                    <Button variant="outline" className="bg-transparent">
-                      Browse Packages
-                    </Button>
-                  </Link>
-                  <Link href={`/customer/bids/new?application=${application.id}`}>
-                    <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">Open Bid</Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Technical Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <Zap className="w-5 h-5 text-emerald-500" />
-                Technical Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Roof Type</p>
-                  <p className="font-medium text-foreground">{application.technicalDetails.roofType}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Roof Area</p>
-                  <p className="font-medium text-foreground">{application.technicalDetails.roofArea}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monthly Consumption</p>
-                  <p className="font-medium text-foreground">{application.technicalDetails.monthlyConsumption}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Connection Phase</p>
-                  <p className="font-medium text-foreground">{application.technicalDetails.connectionPhase}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Documents */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-500" />
-                Uploaded Documents
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {Object.entries(application.documents).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium text-foreground capitalize">
-                        {key.replace(/([A-Z])/g, " $1").trim()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{value}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    <Download className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Selected Installer */}
-        {application.selectedInstaller && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <Building className="w-5 h-5 text-emerald-500" />
-                Selected Installer
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <p className="font-semibold text-foreground">{application.selectedInstaller.name}</p>
-                  <p className="text-sm text-muted-foreground">{application.selectedInstaller.packageName}</p>
-                </div>
-                <p className="text-lg font-bold text-emerald-500">
-                  Rs. {application.selectedInstaller.price.toLocaleString()}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Rejection Reason */}
-        {application.status === "rejected" && application.rejectionReason && (
-          <Card className="border-red-500/50 bg-red-500/5">
-            <CardHeader>
-              <CardTitle className="text-red-500 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5" />
-                Rejection Reason
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-foreground">{application.rejectionReason}</p>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </DashboardLayout>
   )
